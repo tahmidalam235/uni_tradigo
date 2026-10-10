@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(where flutter:*)",
+      "Read(//c/Users/Tahmid/flutter/bin/**)",
+      "Read(//c/flutter/bin/**)",
+      "Read(//c/src/flutter/bin/**)",
+      "Bash(find . -type f \\\\\\(-name *.png -o -name *.jpg -o -name *.jpeg -o -name *.webp -o -name *.svg \\\\\\))",
+      "Bash(mkdir -p assets/images)",
+      "Bash(cp \"/c/Users/Tahmid/Downloads/uni_tradigo_logo.png\" assets/images/uni_tradigo_logo.png)",
+      "Read(//c/Users/Tahmid/Downloads/**)",
+      "Bash(py --version)",
+      "Bash(magick -version)",
+      "Bash(convert -version)",
+      "Bash(python:*)",
+      "Bash(cd:*)",
+      "Bash(mkdir -p \"android/app/src/main/kotlin/com/example/uni_tradigo\")",
+      "Bash(mv \"android/app/src/main/kotlin/com/example/uni_tradigoo/MainActivity.kt\" \"android/app/src/main/kotlin/com/example/uni_tradigo/MainActivity.kt\")",
+      "Bash(rmdir \"android/app/src/main/kotlin/com/example/uni_tradigoo\")",
+      "Bash(flutter --version)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter test:*)",
+      "Bash(flutter doctor:*)",
+      "Bash(flutter build:*)",
+      "Bash(find /c/Users/Tahmid/StudioProjects/uni_tradigo -path */build* -prune -o -name firestore.rules -print)",
+      "Bash(firebase --version)",
+      "Bash(firebase projects:list)",
+      "Bash(firebase deploy:*)",
+      "Bash(firebase storage:buckets:list --project uni-tradigo-f12fe)",
+      "Bash(gsutil ls:*)",
+      "Bash(firebase firestore:rules:get --project uni-tradigo-f12fe)",
+      "Bash(firebase --help)",
+      "Bash(flutter install:*)"
+    ]
+  }
+}
