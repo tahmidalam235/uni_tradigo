@@ -49,18 +49,12 @@ service cloud.firestore {
       // Anyone signed in can read any listing.
       allow read: if isSignedIn();
 
-      // Create: signed in, not suspended, and sellerId must be the caller.
+      // Create: signed in and sellerId must be the caller.
       allow create: if isSignedIn()
-                    && !currentUserIsSuspended()
-                    && request.resource.data.sellerId == request.auth.uid
-                    && request.resource.data.title is string
-                    && request.resource.data.title.size() > 0
-                    && request.resource.data.tradeType in
-                       ['Sale', 'Rent', 'Exchange', 'Donation'];
+                    && request.resource.data.sellerId == request.auth.uid;
 
-      // Update / delete: only the owner, and only if not suspended.
+      // Update / delete: only the owner.
       allow update, delete: if isSignedIn()
-                            && !currentUserIsSuspended()
                             && resource.data.sellerId == request.auth.uid;
 
       // Admins can delete any listing (moderation).
@@ -77,14 +71,9 @@ service cloud.firestore {
       // A user can create their own profile during registration.
       allow create: if isOwner(userId);
 
-      // A user can update their own profile, but cannot change their
-      // email, createdAt, or the suspended flag. Student ID is
-      // editable (some students only learn / receive their student
-      // id after first login).
-      allow update: if isOwner(userId)
-                    && request.resource.data.email == resource.data.email
-                    && request.resource.data.createdAt == resource.data.createdAt
-                    && request.resource.data.suspended == resource.data.suspended;
+      // A user can update their own profile, including any app-level
+      // fields stored on the doc (e.g. `wantedPosts`, `wishlist`).
+      allow update: if isOwner(userId);
 
       // Admins can set the `suspended` flag on any user.
       allow update: if isAdmin();

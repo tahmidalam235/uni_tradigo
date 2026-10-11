@@ -59,11 +59,13 @@ class WantedPostsScreen extends StatelessWidget {
                 department: (d['department'] ?? '').toString(),
                 postedAt: _toDt(d['createdAt']),
               );
+              final contactEmail = (d['contactEmail'] ?? '').toString();
               return _WantedCard(
                 post: post,
                 ownerUid: ownerUid,
                 isMine: isMine,
-                onContact: () => _contact(context, post, ownerUid),
+                onContact: () =>
+                    _contact(context, post, ownerUid, contactEmail),
                 onEdit: () => _openEditor(context, post),
               );
             },
@@ -74,7 +76,8 @@ class WantedPostsScreen extends StatelessWidget {
   }
 
   Future<void> _contact(
-      BuildContext context, WantedPost p, String? ownerUid) async {
+      BuildContext context, WantedPost p, String? ownerUid,
+      String contactEmail) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     if (ownerUid == null || ownerUid.isEmpty) {
@@ -83,14 +86,22 @@ class WantedPostsScreen extends StatelessWidget {
       );
       return;
     }
-    // Open the chatbox immediately. The screen itself initializes
-    // the conversation (idempotent) and streams messages — no need to
-    // await any Firestore write before navigating.
+    if (ownerUid == user.uid) {
+      // Can't chat with yourself.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot chat with yourself.')),
+      );
+      return;
+    }
+    // Open the chatbox immediately — same pattern the listing Chat
+    // button uses. ChatScreen initializes the conversation
+    // (idempotent) and streams messages; no need to await any
+    // Firestore write before navigating.
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           peerName: p.postedBy,
-          peerEmail: '',
+          peerEmail: contactEmail,
           peerUid: ownerUid,
         ),
       ),

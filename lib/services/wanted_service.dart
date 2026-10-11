@@ -8,15 +8,11 @@ import '../models/item.dart';
 /// description, postedBy, postedById, department, contactEmail,
 /// createdAt) plus a client-generated `id`.
 ///
-/// Why not a top-level `wantedPosts` collection: the deployed Firestore
-/// ruleset in this project does not include a `match /wantedPosts/...`
-/// block, so writes return `PERMISSION_DENIED` from the default-deny
-/// rule. Storing the wanted posts as a plain field on the existing
-/// `users/{uid}` document piggy-backs on the `users/{userId}` rule that
-/// is already in every shipped ruleset (read by any signed-in user,
-/// write by the owner), so wanted posts work on any ruleset that
-/// already lets users read/write their own profile. Other users can
-/// still browse wanted posts by reading each user doc.
+/// Why this layout: the project's Firestore rules allow signed-in users
+/// to read any `users/{userId}` doc and the owner to update their
+/// own, so storing wanted posts as a field on the user doc piggy-backs
+/// on that rule. Other users can still browse wanted posts by reading
+/// each user doc.
 class WantedService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -63,21 +59,29 @@ class WantedService {
   }
 
   /// Streams the raw wanted-post maps. Used by the listing UI to read
-  /// the owner's uid for the "Contact Student" button.
+  /// the owner's uid for the "Contact Student" button. Returns the
+  /// underlying entry map (with the `postedById` fallback injected
+  /// by `streamAll`) so callers see the owner uid even if the stored
+  /// entry was missing the field.
   Stream<List<Map<String, dynamic>>> streamAllRaw() {
-    return streamAll().map(
-      (posts) => posts.map((p) {
-        return <String, dynamic>{
-          'id': p.id,
-          'title': p.title,
-          'description': p.description,
-          'postedBy': p.postedBy,
-          'postedById': p.postedById,
-          'department': p.department,
-          'createdAt': Timestamp.fromDate(p.postedAt),
-        };
-      }).toList(growable: false),
-    );
+    return _users.snapshots().map((snap) {
+      final all = <Map<String, dynamic>>[];
+      for (final doc in snap.docs) {
+        final list = _readList(doc.data());
+        for (final entry in list) {
+          all.add({...entry, 'postedById': entry['postedById'] ?? doc.id});
+        }
+      }
+      all.sort((a, b) {
+        final ta = a['createdAt'];
+        final tb = b['createdAt'];
+        if (ta is Timestamp && tb is Timestamp) {
+          return tb.compareTo(ta);
+        }
+        return 0;
+      });
+      return all;
+    });
   }
 
   /// Streams the wanted posts created by a specific user.
@@ -97,10 +101,8 @@ class WantedService {
   }
 
   /// Creates a new wanted post on the given user's document. Returns
-  /// the generated id. Uses `FieldValue.arrayUnion` so the operation
-  /// is atomic and the `users/{userId}` write rule (which requires
-  /// email/studentId/createdAt/suspended to remain unchanged) is
-  /// satisfied.
+  /// the generated id. Uses `FieldValue.arrayUnion` so the existing
+  /// user doc fields are preserved.
   Future<String> create({
     required String title,
     required String description,
