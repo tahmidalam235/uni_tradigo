@@ -45,10 +45,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   Future<void> _confirmDeal() async {
     if (_busy) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (widget.item.sellerId.isNotEmpty &&
+        widget.item.sellerId == user.uid) {
+      // Sellers can't buy their own listing.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot buy your own listing.')),
+      );
+      return;
+    }
     setState(() => _busy = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
       if (_txId == null) {
         // Read the buyer's display name.
         final profileSnap = await FirebaseFirestore.instance

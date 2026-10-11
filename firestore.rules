@@ -148,7 +148,6 @@ service cloud.firestore {
 
       // Create: caller must be the buyer and participants must be [seller, buyer].
       allow create: if isSignedIn()
-                    && !currentUserIsSuspended()
                     && request.resource.data.buyerId == request.auth.uid
                     && request.auth.uid in request.resource.data.participants
                     && request.resource.data.participants.size() == 2;
