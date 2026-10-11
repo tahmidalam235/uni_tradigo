@@ -23,7 +23,18 @@ class AddListingScreen extends StatefulWidget {
   final bool embedded;
   final Item? editItem;
 
-  const AddListingScreen({super.key, this.embedded = false, this.editItem});
+  /// Called when a new (non-edit) listing finishes uploading to Firestore.
+  /// The Home screen wires this so that the embedded Add Listing tab can
+  /// jump the bottom-nav back to the marketplace tab after a successful
+  /// post. Optional — if null, the screen falls back to popping the route.
+  final VoidCallback? onPosted;
+
+  const AddListingScreen({
+    super.key,
+    this.embedded = false,
+    this.editItem,
+    this.onPosted,
+  });
 
   @override
   State<AddListingScreen> createState() => _AddListingScreenState();
@@ -230,24 +241,41 @@ class _AddListingScreenState extends State<AddListingScreen> {
         );
       }
 
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Listing Posted'),
-          content: Text(edit == null
-              ? 'Your listing has been posted to the marketplace.'
-              : 'Your listing has been updated.'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                if (!widget.embedded) Navigator.pop(context);
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+      // Post-upload navigation:
+      //   - embedded tab in HomeScreen: ask the parent to switch the
+      //     bottom-nav back to the marketplace tab so the new listing
+      //     is visible.
+      //   - pushed route (e.g. from MyListings): pop the entire stack
+      //     back to the root (HomeScreen) so the user lands on the
+      //     marketplace.
+      //   - edit case: do nothing — just close the screen.
+      if (edit == null) {
+        if (widget.onPosted != null) {
+          widget.onPosted!();
+        } else if (mounted) {
+          // Standalone route — pop everything down to the root
+          // (HomeScreen) so the user lands on the marketplace.
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      } else if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Listing Updated'),
+            content:
+                const Text('Your listing has been updated successfully.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (!widget.embedded) Navigator.pop(context);
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       // Show the actual error message so it's easy to debug from the UI

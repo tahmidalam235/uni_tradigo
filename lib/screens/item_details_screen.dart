@@ -1,7 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/app_state.dart';
 import '../models/item.dart';
+import '../services/chat_service.dart';
+import '../services/listing_service.dart';
+import '../services/report_service.dart';
+import '../services/wishlist_service.dart';
 import 'chat_screen.dart';
 import 'transaction_screen.dart';
 
@@ -63,6 +69,7 @@ class ItemDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = AppStateScope.of(context);
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
     return AnimatedBuilder(
       animation: appState,
       builder: (_, __) {
@@ -74,18 +81,30 @@ class ItemDetailsScreen extends StatelessWidget {
           );
         }
         final isWished = appState.isWishlisted(item.id);
+        // Ownership check: when the current user IS the seller of this
+        // listing, we hide the Chat and Buy buttons and show a single
+        // "Update Status" button instead, so users cannot message or
+        // purchase their own listings.
+        final isOwner =
+            currentUid.isNotEmpty && item.sellerId == currentUid;
         return Scaffold(
           appBar: AppBar(
             title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             actions: [
               IconButton(
                 tooltip: isWished ? 'Remove from wishlist' : 'Add to wishlist',
-                onPressed: () => appState.toggleWishlist(item.id),
+                onPressed: () async => _toggleWishlist(context, appState, item.id),
                 icon: Icon(
                   isWished ? Icons.favorite : Icons.favorite_border,
                   color: isWished ? Colors.red : Colors.white,
                 ),
               ),
+              if (_canReport(context, item))
+                IconButton(
+                  tooltip: 'Report this listing',
+                  onPressed: () => _openReportDialog(context, item),
+                  icon: const Icon(Icons.flag_outlined),
+                ),
             ],
           ),
           body: ListView(
@@ -249,57 +268,266 @@ class ItemDetailsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => appState.toggleWishlist(item.id),
-                      icon: Icon(
-                        isWished ? Icons.favorite : Icons.favorite_border,
-                        color: Colors.red,
-                      ),
-                      label: Text(isWished ? 'Wishlisted' : 'Wishlist'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              peerName: item.sellerName,
-                              peerEmail: item.sellerEmail,
-                              conversationId: 'auto_${item.sellerId}',
+              // When the current user is the seller, show Wishlist + a
+              // single Update Status button (Available/Unavailable) and
+              // hide Chat + Buy so they cannot message or buy themselves.
+              // For other users, keep the original Wishlist + Chat + Buy
+              // row unchanged.
+              child: isOwner
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _toggleWishlist(
+                                context, appState, item.id),
+                            icon: Icon(
+                              isWished
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              color: Colors.red,
+                            ),
+                            label: Text(
+                                isWished ? 'Wishlisted' : 'Wishlist'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: item.isAvailable
+                                ? () => _setAvailability(
+                                      context, appState, item, false,
+                                    )
+                                : () => _setAvailability(
+                                      context, appState, item, true,
+                                    ),
+                            icon: Icon(
+                              item.isAvailable
+                                  ? Icons.archive_outlined
+                                  : Icons.unarchive_outlined,
+                            ),
+                            label: Text(
+                              item.isAvailable
+                                  ? 'Mark Unavailable'
+                                  : 'Mark Available',
                             ),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      label: const Text('Chat'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => TransactionScreen(item: item),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _toggleWishlist(
+                                context, appState, item.id),
+                            icon: Icon(
+                              isWished
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              color: Colors.red,
+                            ),
+                            label: Text(
+                                isWished ? 'Wishlisted' : 'Wishlist'),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.shopping_cart_checkout),
-                      label: const Text('Buy'),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: item.sellerId.isEmpty
+                                ? null
+                                : () => _openChat(context, item),
+                            icon: const Icon(Icons.chat_bubble_outline),
+                            label: const Text('Chat'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      TransactionScreen(item: item),
+                                ),
+                              );
+                            },
+                            icon:
+                                const Icon(Icons.shopping_cart_checkout),
+                            label: const Text('Buy'),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ),
         );
       },
     );
+  }
+
+  Future<void> _toggleWishlist(
+      BuildContext context, AppState appState, String itemId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final isWished = appState.isWishlisted(itemId);
+    appState.toggleWishlistLocal(itemId);
+    try {
+      final svc = WishlistService();
+      if (isWished) {
+        await svc.remove(user.uid, itemId);
+      } else {
+        await svc.add(user.uid, itemId);
+      }
+    } catch (e) {
+      appState.toggleWishlistLocal(itemId);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update wishlist: $e')),
+      );
+    }
+  }
+
+  /// Toggles the listing's availability (Active <-> Archived) for the
+  /// owner. Updates Firestore via [ListingService.setAvailability] and
+  /// keeps the in-memory AppState cache in sync so the badge and the
+  /// button label refresh immediately.
+  Future<void> _setAvailability(
+    BuildContext context,
+    AppState appState,
+    Item item,
+    bool isAvailable,
+  ) async {
+    if (item.sellerId != FirebaseAuth.instance.currentUser?.uid) return;
+    try {
+      await ListingService().setAvailability(item.id, isAvailable);
+      // Reflect the new state in the local cache so the badge/button
+      // update on the next AnimatedBuilder tick.
+      appState.replaceListings([
+        for (final existing in appState.listings)
+          if (existing.id == item.id)
+            Item(
+              id: existing.id,
+              title: existing.title,
+              description: existing.description,
+              price: existing.price,
+              category: existing.category,
+              condition: existing.condition,
+              tradeType: existing.tradeType,
+              imageUrl: existing.imageUrl,
+              sellerName: existing.sellerName,
+              sellerEmail: existing.sellerEmail,
+              sellerId: existing.sellerId,
+              pickupLocation: existing.pickupLocation,
+              isAvailable: isAvailable,
+              postedAt: existing.postedAt,
+            )
+          else
+            existing,
+      ]);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update status: $e')),
+      );
+    }
+  }
+
+  Future<void> _openChat(BuildContext context, Item item) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (item.sellerId.isEmpty || item.sellerId == user.uid) {
+      // Can't chat with yourself.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot chat with yourself.')),
+      );
+      return;
+    }
+    // My display name.
+    final profileSnap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+    final myName = (profileSnap.data()?['name'] ?? '').toString();
+    final chat = ChatService();
+    final convoId = await chat.ensureConversation(
+      myUid: user.uid,
+      myName: myName,
+      otherUid: item.sellerId,
+      otherName: item.sellerName,
+    );
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          peerName: item.sellerName,
+          peerEmail: item.sellerEmail,
+          peerUid: item.sellerId,
+          conversationId: convoId,
+        ),
+      ),
+    );
+  }
+
+  bool _canReport(BuildContext context, Item item) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+    // You can only report listings that you don't own.
+    return item.sellerId.isNotEmpty && item.sellerId != user.uid;
+  }
+
+  Future<void> _openReportDialog(BuildContext context, Item item) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final reasonCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Report listing'),
+        content: TextField(
+          controller: reasonCtrl,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'Why is this listing inappropriate?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final reason = reasonCtrl.text.trim();
+    if (reason.isEmpty) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final name = (snap.data()?['name'] ?? '').toString();
+      await ReportService().createReport(
+        listingId: item.id,
+        listingTitle: item.title,
+        reason: reason,
+        reporterId: user.uid,
+        reporterName: name,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report submitted. Thank you.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not submit report: $e')),
+      );
+    }
   }
 
   Widget _infoPill(String label, String value) {

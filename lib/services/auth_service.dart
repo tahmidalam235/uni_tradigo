@@ -15,15 +15,23 @@ class AuthService {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   /// Signs a user in with email/password. Throws [AuthException] on failure.
+  ///
+  /// After a successful sign-in we reload the user so any custom claims
+  /// (e.g. admin role) and the email-verification flag are fresh.
   Future<UserCredential> login({
     required String email,
     required String password,
   }) async {
     try {
-      return await _auth.signInWithEmailAndPassword(
+      final cred = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
+      // Force a token refresh so custom claims (admin etc.) are available
+      // immediately on this device.
+      await cred.user?.getIdToken(true);
+      await cred.user?.reload();
+      return cred;
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyLoginMessage(e));
     } catch (_) {
@@ -39,10 +47,12 @@ class AuthService {
     required String password,
   }) async {
     try {
-      return await _auth.createUserWithEmailAndPassword(
+      final cred = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+      await cred.user?.getIdToken(true);
+      return cred;
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyRegisterMessage(e));
     } catch (_) {
@@ -55,6 +65,32 @@ class AuthService {
   /// Signs the current user out.
   Future<void> logout() async {
     await _auth.signOut();
+  }
+
+  /// Returns true if the current user is verified (custom claim `admin`).
+  /// We read this from the ID token so it can be checked in security rules.
+  Future<bool> isCurrentUserAdmin() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    try {
+      final token = await user.getIdTokenResult(true);
+      final claims = token.claims ?? const <String, dynamic>{};
+      return claims['admin'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Sends an email verification link to the currently signed-in user.
+  /// Best-effort: failures are silently ignored so the caller can proceed.
+  Future<void> sendEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null || user.emailVerified) return;
+    try {
+      await user.sendEmailVerification();
+    } catch (_) {
+      // ignore — non-critical
+    }
   }
 
   // ---- helpers -----------------------------------------------------------

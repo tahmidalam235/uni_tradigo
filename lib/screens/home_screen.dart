@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../data/app_state.dart';
 import '../data/dummy_data.dart';
 import '../models/item.dart';
@@ -11,6 +12,8 @@ import 'messages_screen.dart';
 import 'profile_screen.dart';
 import 'wanted_posts_screen.dart';
 import '../services/listing_service.dart';
+import '../services/wishlist_service.dart';
+import '../services/user_service.dart';
 
 // HomeScreen — bottom-nav host with 5 tabs:
 //   Home (marketplace), Wishlist, Add (FAB-style), Messages, Profile.
@@ -30,7 +33,14 @@ class _HomeScreenState extends State<HomeScreen> {
   late final List<Widget> _pages = [
     const _MarketplaceTab(),
     const WishlistScreen(embedded: true),
-    const AddListingScreen(embedded: true),
+    AddListingScreen(
+      embedded: true,
+      // After a successful new listing post, switch the bottom-nav back
+      // to the marketplace tab so the new item is visible.
+      onPosted: () {
+        if (mounted) setState(() => _index = 0);
+      },
+    ),
     const MessagesScreen(embedded: true),
     const ProfileScreen(embedded: true),
   ];
@@ -121,10 +131,31 @@ class _MarketplaceTab extends StatefulWidget {
 class _MarketplaceTabState extends State<_MarketplaceTab> {
   final TextEditingController _searchCtrl = TextEditingController();
   final _listingService = ListingService();
+  final _wishlistService = WishlistService();
+  final _userService = UserService();
   String? _selectedCategory; // null = all
   String _sort = 'Recent'; // Recent / PriceLow / PriceHigh
   String _condition = ''; // empty = any
   String _tradeType = ''; // empty = any
+
+  @override
+  void initState() {
+    super.initState();
+    // Set the current user id/name on the AppState so other screens
+    // (My Listings, Profile) can read them without re-querying Firebase.
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final appState = AppStateScope.of(context);
+      appState.setCurrentUserId(user.uid);
+      // Best-effort: load the user's display name from their profile doc.
+      _userService.getProfile(user.uid).then((profile) {
+        if (profile != null) {
+          appState.setCurrentUserName(
+              (profile['name'] ?? '').toString());
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -132,19 +163,10 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
     super.dispose();
   }
 
-  /// Combines the demo dummy listings with the latest Firestore listings.
-  /// New listings are kept unique by id (Firestore ids start with a non-"i"
-  /// string, so they won't collide with dummy ids like 'i1'..'i8').
-  List<Item> _combined(List<Item> firestore) {
-    final byId = <String, Item>{};
-    for (final i in DummyData.listings) {
-      byId[i.id] = i;
-    }
-    for (final i in firestore) {
-      byId[i.id] = i;
-    }
-    return byId.values.toList(growable: false);
-  }
+  /// Returns the listings straight from Firestore.
+  /// Dummy data is no longer mixed in — only real user-created listings
+  /// are shown in the marketplace.
+  List<Item> _combined(List<Item> firestore) => firestore;
 
   List<Item> _filtered(List<Item> all) {
     final q = _searchCtrl.text.trim().toLowerCase();
@@ -334,149 +356,224 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
   @override
   Widget build(BuildContext context) {
     final appState = AppStateScope.of(context);
+    final user = FirebaseAuth.instance.currentUser;
     return StreamBuilder<List<Item>>(
       stream: _listingService.streamAllListings(),
       builder: (context, snapshot) {
-        // If Firestore hasn't returned yet, fall back to the in-memory
-        // AppState list so the UI still renders something immediately.
+        // 1) Error state: surface it with a friendly message.
+        if (snapshot.hasError && !snapshot.hasData) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline,
+                      color: Colors.red, size: 48),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Could not load listings.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Please check your internet connection.\n'
+                    'Details: ${snapshot.error}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Colors.black54),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // 2) Loading: show a spinner on the very first build.
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        // 3) Loaded: use the Firestore data directly.
         final firestoreListings = snapshot.data ?? const <Item>[];
-        // Keep AppState in sync so other screens (wishlist, my listings)
-        // that share the same items by id see the same data.
-        // We only push Firestore listings into AppState.listings; dummy
-        // listings stay available via DummyData directly.
         final combinedForState = _combined(firestoreListings);
 
-        // Keep AppState's internal _listings up-to-date for any other
-        // screen that reads from appState.listings (e.g. item details,
-        // wishlist). This is the source of truth for the rest of the
-        // app — both dummy and Firestore entries.
+        // Keep AppState's internal _listings up-to-date so other
+        // screens that read from appState.listings (item details,
+        // wishlist) see the same data.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           appState.replaceListings(combinedForState);
         });
 
-        // Inner AnimatedBuilder so wishlist toggles still rebuild the UI.
-        return AnimatedBuilder(
-          animation: appState,
-          builder: (_, __) {
-            final filtered = _filtered(combinedForState);
-            return ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: [
-                // Search bar.
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _searchCtrl,
-                          onChanged: (_) => setState(() {}),
-                          decoration: InputDecoration(
-                            hintText: 'Search items...',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _searchCtrl.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(Icons.close),
-                                    onPressed: () {
-                                      _searchCtrl.clear();
-                                      setState(() {});
-                                    },
-                                  ),
-                          ),
-                        ),
+        // Stream the user's wishlist ids into AppState so the heart
+        // icons everywhere stay in sync with Firestore.
+        if (user != null) {
+          return StreamBuilder<Set<String>>(
+            stream: _wishlistService.streamWishlistIds(user.uid),
+            builder: (context, wishSnap) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                appState.setWishlist(wishSnap.data ?? <String>{});
+              });
+              return _buildContent(appState, combinedForState);
+            },
+          );
+        }
+
+        return _buildContent(appState, combinedForState);
+      },
+    );
+  }
+
+  Widget _buildContent(AppState appState, List<Item> combinedForState) {
+    return AnimatedBuilder(
+      animation: appState,
+      builder: (_, __) {
+        final filtered = _filtered(combinedForState);
+        return ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
+            // Search bar.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Search items...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchCtrl.text.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() {});
+                                },
+                              ),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        onPressed: _openFilters,
-                        icon: const Icon(Icons.tune),
-                      ),
-                    ],
-                  ),
-                ),
-                // Category strip.
-                SizedBox(
-                  height: 44,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    children: [
-                      CategoryChip(
-                        label: 'All',
-                        icon: Icons.apps,
-                        selected: _selectedCategory == null,
-                        onTap: () => setState(() => _selectedCategory = null),
-                      ),
-                      const SizedBox(width: 8),
-                      for (final c in DummyData.categories) ...[
-                        CategoryChip(
-                          label: c,
-                          icon: _iconFor(c),
-                          selected: _selectedCategory == c,
-                          onTap: () =>
-                              setState(() => _selectedCategory = c),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                    ],
-                  ),
-                ),
-                // Featured header.
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Text(
-                    'Featured Listings',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (filtered.isNotEmpty)
-                  SizedBox(
-                    height: 150,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount:
-                          filtered.length < 3 ? filtered.length : 3,
-                      itemBuilder: (_, i) {
-                        final item = filtered[i];
-                        return _FeaturedTile(
-                          item: item,
-                          onTap: () => _openDetails(item),
-                        );
-                      },
                     ),
                   ),
-                // Recent header.
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Text(
-                    'Recent Listings',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    onPressed: _openFilters,
+                    icon: const Icon(Icons.tune),
                   ),
-                ),
-                if (filtered.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(40),
-                    child: Center(
-                      child: Text('No items match your search.'),
+                ],
+              ),
+            ),
+            // Category strip.
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  CategoryChip(
+                    label: 'All',
+                    icon: Icons.apps,
+                    selected: _selectedCategory == null,
+                    onTap: () => setState(() => _selectedCategory = null),
+                  ),
+                  const SizedBox(width: 8),
+                  for (final c in DummyData.categories) ...[
+                    CategoryChip(
+                      label: c,
+                      icon: _iconFor(c),
+                      selected: _selectedCategory == c,
+                      onTap: () => setState(() => _selectedCategory = c),
                     ),
-                  )
-                else
-                  for (final item in filtered)
-                    ItemCard(
+                    const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ),
+            // Featured header.
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text(
+                'Featured Listings',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (filtered.isNotEmpty)
+              SizedBox(
+                height: 150,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: filtered.length < 3 ? filtered.length : 3,
+                  itemBuilder: (_, i) {
+                    final item = filtered[i];
+                    return _FeaturedTile(
                       item: item,
                       onTap: () => _openDetails(item),
-                      isWishlisted: appState.isWishlisted(item.id),
-                      onWishlistToggle: () => appState.toggleWishlist(item.id),
-                    ),
-                const SizedBox(height: 80),
-              ],
-            );
-          },
+                    );
+                  },
+                ),
+              ),
+            // Recent header.
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text(
+                'Recent Listings',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (filtered.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(40),
+                child: Center(
+                  child: Text(
+                    combinedForState.isEmpty
+                        ? 'No listings yet.\nBe the first to post one!'
+                        : 'No items match your search.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            else
+              for (final item in filtered)
+                ItemCard(
+                  item: item,
+                  onTap: () => _openDetails(item),
+                  isWishlisted: appState.isWishlisted(item.id),
+                  onWishlistToggle: () => _toggleWishlist(item.id),
+                ),
+            const SizedBox(height: 80),
+          ],
         );
       },
     );
+  }
+
+  Future<void> _toggleWishlist(String listingId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final appState = AppStateScope.of(context);
+    final isWished = appState.isWishlisted(listingId);
+    // Optimistic UI update
+    appState.toggleWishlistLocal(listingId);
+    try {
+      if (isWished) {
+        await _wishlistService.remove(user.uid, listingId);
+      } else {
+        await _wishlistService.add(user.uid, listingId);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // Revert on failure
+      appState.toggleWishlistLocal(listingId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update wishlist: $e')),
+      );
+    }
   }
 
   void _openDetails(Item item) {

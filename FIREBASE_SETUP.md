@@ -1,8 +1,10 @@
 # Firebase Setup Guide for Uni-Tradigo
 
-This project uses **Firestore only** (no Firebase Storage). The selected image
-is converted to a Base64 data URL and saved inside the Firestore document
-directly, so the project works fully on the free Firebase Spark plan.
+This project uses **Firebase Authentication** and **Cloud Firestore**.
+Listing images are stored as Base64 data URLs **inside the Firestore
+document** so the project works fully on the free Firebase Spark plan.
+The Firebase Storage rules are included for future use but are not
+required to run the app today.
 
 ## One-time setup
 
@@ -16,30 +18,11 @@ directly, so the project works fully on the free Firebase Spark plan.
    and **paste** it into the editor.
 7. Click **Publish**.
 
-The rules look like:
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /listings/{listingId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-                    && request.resource.data.sellerId == request.auth.uid;
-      allow update, delete: if request.auth != null
-                            && resource.data.sellerId == request.auth.uid;
-    }
-    match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null
-                            && request.auth.uid == userId;
-      allow delete: if false;
-    }
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-}
-```
+If you also want the storage rules (not required today):
+1. In the left menu, click **Build → Storage**.
+2. Click the **Rules** tab.
+3. Replace the contents with the contents of `storage.rules`.
+4. Click **Publish**.
 
 ## Alternative: deploy rules via CLI
 
@@ -47,35 +30,126 @@ If you have the Firebase CLI installed and are logged in, just run:
 
 ```bash
 cd /c/Users/Tahmid/StudioProjects/uni_tradigo
-firebase deploy --only firestore:rules --project uni-tradigo-f12fe
+firebase deploy --only firestore:rules,storage --project uni-tradigo-f12fe
 ```
 
 You should see:
 ```
 +  firestore: released rules firestore.rules to cloud.firestore
++  storage:    released rules storage.rules to firebase.storage
 ```
+
+## Configuring the first admin (one-time)
+
+The Admin Dashboard is gated by an `admin` **custom claim** on the
+caller's Firebase Auth ID token. The client app **cannot** grant this
+claim to itself — that would defeat the purpose. You must set it from
+a trusted environment using the Firebase Admin SDK.
+
+### Option A — Firebase Cloud Functions (recommended for production)
+
+Install the Firebase CLI and run:
+
+```bash
+firebase init functions   # one-time
+```
+
+Then in `functions/index.js`:
+
+```js
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+admin.initializeApp();
+
+exports.setAdminClaim = functions.https.onCall(async (data, context) => {
+  // Only an existing admin can promote other users.
+  if (context.auth.token.admin !== true) {
+    throw new functions.https.HttpsError(
+      'permission-denied', 'Only admins can grant admin role.');
+  }
+  const uid = data.uid;
+  if (typeof uid !== 'string' || !uid) {
+    throw new functions.https.HttpsError('invalid-argument', 'uid required');
+  }
+  await admin.auth().setCustomUserClaims(uid, { admin: true });
+  return { ok: true };
+});
+```
+
+Deploy:
+
+```bash
+firebase deploy --only functions
+```
+
+Then call the function from a trusted environment (or from an existing
+admin's account) to promote a user.
+
+### Option B — Firebase Admin SDK from a Node script (one-time)
+
+For the very first admin only, use a local script:
+
+```js
+// scripts/grant-admin.js
+const admin = require('firebase-admin');
+const serviceAccount = require('./service-account.json');
+
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+
+const uid = process.argv[2];
+admin.auth().setCustomUserClaims(uid, { admin: true })
+   .then(() => {
+     console.log('Granted admin to', uid);
+     process.exit(0);
+   });
+```
+
+Run:
+
+```bash
+node scripts/grant-admin.js <user-uid>
+```
+
+Download a service account JSON from
+**Project Settings → Service Accounts → Generate new private key**.
+
+After running the script, the user must **sign out and sign back in**
+(or wait up to one hour) before the new `admin` claim appears in their
+ID token.
+
+## Firestore data model
+
+| Collection | Path | Used for |
+| --- | --- | --- |
+| `users` | `users/{uid}` | Student profile, department, suspended flag |
+| `listings` | `listings/{listingId}` | Marketplace listings (Sale/Rent/Exchange/Donation) |
+| `users/{uid}/wishlist/{listingId}` | subcollection | Per-user saved items |
+| `wantedPosts` | `wantedPosts/{postId}` | "I am looking for..." posts |
+| `conversations` | `conversations/{conversationId}` | Chat summary, 2 participants |
+| `conversations/{id}/messages/{msgId}` | subcollection | Chat messages |
+| `transactions` | `transactions/{txId}` | Buyer/seller deals |
+| `reviews` | `reviews/{reviewId}` | Ratings and feedback |
+| `reports` | `reports/{reportId}` | User-submitted reports for admin review |
 
 ## Rebuild and test
 
 ```bash
+flutter pub get
+flutter analyze
 flutter build apk --debug
 flutter install
 ```
 
-Now:
-- Post a listing → it will appear on Home.
-- Pick an image → it will be stored as Base64 inside the listing document
-  and shown on the Item Details screen.
-- Logout → Login → the listing is still there.
-- Login as another user → the listing is visible on Home but NOT in that
-  user's "My Listings".
+## Approved students
 
-## Why Firestore only (no Storage)?
+The login and register screens still consult a small client-side email
+check (`lib/data/approved_emails.dart`) so the viva demo can limit who
+can register. In production this should be replaced by either:
 
-Firebase Storage requires the paid Blaze plan on newer projects. To keep this
-academic project fully on the free Spark plan, listing images are converted to
-Base64 strings and stored directly in the Firestore document. This works
-transparently: `Image.network(...)` accepts Base64 data URLs out of the box.
+- a server-side allowlist (Cloud Function or custom backend), or
+- a `users` collection document that admins must approve before the
+  user can sign in.
 
-The Firestore per-document size limit is 1 MB, which is plenty for compressed
-listing photos.
+The Firestore rules already enforce that *all* writes go through an
+authenticated student account, so a random internet user cannot create
+listings, post wanted items, or read other students' data.

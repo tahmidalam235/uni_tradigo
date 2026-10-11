@@ -79,6 +79,7 @@ class Conversation {
   final String id;
   final String otherUserName;
   final String otherUserEmail;
+  final String otherUserId; // Firebase Auth UID of the other participant
   final String lastMessage;
   final DateTime lastTime;
 
@@ -86,7 +87,98 @@ class Conversation {
     required this.id,
     required this.otherUserName,
     required this.otherUserEmail,
+    required this.otherUserId,
     required this.lastMessage,
     DateTime? lastTime,
   }) : lastTime = lastTime ?? DateTime.now();
+}
+
+// A profile snapshot — used by screens that show a student's name,
+// department, and average rating without re-querying Firestore everywhere.
+class UserProfile {
+  final String uid;
+  final String name;
+  final String email;
+  final String studentId;
+  final String department;
+  final bool suspended;
+
+  UserProfile({
+    required this.uid,
+    required this.name,
+    required this.email,
+    required this.studentId,
+    required this.department,
+    this.suspended = false,
+  });
+
+  factory UserProfile.fromMap(String uid, Map<String, dynamic> data) {
+    return UserProfile(
+      uid: uid,
+      name: (data['name'] ?? '').toString(),
+      email: (data['email'] ?? '').toString(),
+      studentId: (data['studentId'] ?? '').toString(),
+      department: (data['department'] ?? '').toString(),
+      suspended: data['suspended'] == true,
+    );
+  }
+}
+
+// A deal / transaction record.
+class Transaction {
+  final String id;
+  final String listingId;
+  final String listingTitle;
+  final String sellerId;
+  final String sellerName;
+  final String buyerId;
+  final String buyerName;
+  final String tradeType;
+  final double price;
+  final String pickupLocation;
+  final String status; // 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled'
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  Transaction({
+    required this.id,
+    required this.listingId,
+    required this.listingTitle,
+    required this.sellerId,
+    required this.sellerName,
+    required this.buyerId,
+    required this.buyerName,
+    required this.tradeType,
+    required this.price,
+    required this.pickupLocation,
+    required this.status,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
+}
+
+// A review / rating record.
+class Review {
+  final String id;
+  final String transactionId;
+  final String listingId;
+  final String reviewerId;
+  final String reviewerName;
+  final String reviewedId;
+  final int rating; // 1..5
+  final String feedback;
+  final DateTime createdAt;
+
+  Review({
+    required this.id,
+    required this.transactionId,
+    required this.listingId,
+    required this.reviewerId,
+    required this.reviewerName,
+    required this.reviewedId,
+    required this.rating,
+    required this.feedback,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
 }

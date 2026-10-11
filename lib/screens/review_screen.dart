@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/item.dart';
+import '../services/review_service.dart';
 
-// ReviewScreen — allows the user to give a star rating and feedback.
-
+/// ReviewScreen — submit a 1–5 star rating and written feedback for the
+/// other party on a completed deal. One review per transaction per user
+/// is allowed (enforced by ReviewService + Firestore rules).
 class ReviewScreen extends StatefulWidget {
   final Item item;
-  const ReviewScreen({super.key, required this.item});
+  final String transactionId;
+  const ReviewScreen({
+    super.key,
+    required this.item,
+    required this.transactionId,
+  });
 
   @override
   State<ReviewScreen> createState() => _ReviewScreenState();
@@ -14,6 +23,8 @@ class ReviewScreen extends StatefulWidget {
 class _ReviewScreenState extends State<ReviewScreen> {
   int _rating = 5;
   final TextEditingController _feedback = TextEditingController();
+  final _reviewService = ReviewService();
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -21,31 +32,75 @@ class _ReviewScreenState extends State<ReviewScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (_feedback.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please write some feedback')),
       );
       return;
     }
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Thanks for your review!'),
-        content: Text(
-            'You rated ${widget.item.sellerName} $_rating stars.\nFeedback: ${_feedback.text}'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              // Pop back to the previous screen (item details or home).
-              Navigator.of(context).popUntil((r) => r.isFirst);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+    if (_busy) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    setState(() => _busy = true);
+    try {
+      // Resolve reviewer name and the user being reviewed.
+      final profileSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final reviewerName =
+          (profileSnap.data()?['name'] ?? '').toString();
+
+      // The reviewedId is the other party in the transaction.
+      final txSnap = await FirebaseFirestore.instance
+          .collection('transactions')
+          .doc(widget.transactionId)
+          .get();
+      if (!txSnap.exists) {
+        throw StateError('Transaction not found.');
+      }
+      final tx = txSnap.data() ?? const {};
+      final sellerId = (tx['sellerId'] ?? '').toString();
+      final buyerId = (tx['buyerId'] ?? '').toString();
+      final reviewedId =
+          user.uid == sellerId ? buyerId : sellerId;
+
+      await _reviewService.create(
+        transactionId: widget.transactionId,
+        listingId: widget.item.id,
+        reviewerId: user.uid,
+        reviewerName: reviewerName,
+        reviewedId: reviewedId,
+        rating: _rating,
+        feedback: _feedback.text.trim(),
+      );
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Thanks for your review!'),
+          content: Text(
+              'You rated ${widget.item.sellerName} $_rating stars.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.of(context).popUntil((r) => r.isFirst);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not submit: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -88,9 +143,15 @@ class _ReviewScreenState extends State<ReviewScreen> {
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: _submit,
+            onPressed: _busy ? null : _submit,
             icon: const Icon(Icons.send),
-            label: const Text('Submit Review'),
+            label: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Submit Review'),
           ),
         ],
       ),

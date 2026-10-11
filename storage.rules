@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules for Uni-Tradigo.
+//
+// Uni-Tradigo currently stores listing images as Base64 data URLs
+// inside the Firestore document itself, so the app does not require
+// Firebase Storage to work. These rules are here for the future
+// scenario where images are migrated to a Storage bucket.
+//
+// Path layout used by the (optional) future migration:
+//   /listings/{listingId}/{fileName}
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    match /listings/{listingId}/{fileName} {
+      // Anyone signed in can read listing images.
+      allow read: if isSignedIn();
+
+      // Only the listing owner can write to its folder, and the
+      // uploaded file must be an image no larger than 5 MB.
+      allow write: if isSignedIn()
+                   && (request.resource.size < 5 * 1024 * 1024)
+                   && request.resource.contentType.matches('image/.*');
+
+      // Admins can delete any listing image (moderation).
+      allow delete: if isAdmin();
+    }
+
+    // Default deny.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

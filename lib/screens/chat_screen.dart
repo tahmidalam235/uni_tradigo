@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
-import '../data/app_state.dart';
-import '../models/item.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/chat_service.dart';
 
-// ChatScreen — WhatsApp-like UI. All messages live in AppState memory.
-// TODO: Replace with Firebase real-time chat:
-//   final ref = FirebaseFirestore.instance.collection('chats').doc(id);
-//   ref.snapshots().listen((snap) { ... });
-
+/// ChatScreen — real-time chat with another student.
+/// Messages are streamed from Firestore so the UI updates instantly
+/// whenever a new message is sent by either participant.
 class ChatScreen extends StatefulWidget {
   final String peerName;
   final String peerEmail;
+  final String peerUid;
   final String conversationId;
 
   const ChatScreen({
     super.key,
     required this.peerName,
     required this.peerEmail,
+    required this.peerUid,
     required this.conversationId,
   });
 
@@ -26,6 +27,8 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _ctrl = TextEditingController();
   final ScrollController _scroll = ScrollController();
+  final _chat = ChatService();
+  bool _sending = false;
 
   @override
   void dispose() {
@@ -34,27 +37,51 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _ctrl.text.trim();
-    if (text.isEmpty) return;
-    AppStateScope.of(context)
-        .sendMessage(widget.conversationId, text, fromMe: true);
-    _ctrl.clear();
-    // Auto-scroll to bottom.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
-        _scroll.animateTo(
-          _scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
+    if (text.isEmpty || _sending) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    setState(() => _sending = true);
+    try {
+      // Look up my display name for the message header.
+      String myName = '';
+      final profile = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (profile.exists) {
+        myName = (profile.data()?['name'] ?? '').toString();
       }
-    });
+      await _chat.sendMessage(
+        conversationId: widget.conversationId,
+        senderId: user.uid,
+        senderName: myName,
+        text: text,
+      );
+      _ctrl.clear();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          _scroll.animateTo(
+            _scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final appState = AppStateScope.of(context);
+    final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -93,21 +120,23 @@ class _ChatScreenState extends State<ChatScreen> {
                           color: Colors.greenAccent, size: 14),
                     ],
                   ),
-                  Text(
-                    widget.peerEmail,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Colors.white70),
-                  ),
+                  if (widget.peerEmail.isNotEmpty)
+                    Text(
+                      widget.peerEmail,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.white70),
+                    ),
                 ],
               ),
             ),
           ],
         ),
       ),
-      body: AnimatedBuilder(
-        animation: appState,
-        builder: (_, __) {
-          final messages = appState.messagesFor(widget.conversationId);
+      body: StreamBuilder<List<ChatMsg>>(
+        stream: _chat.streamMessages(widget.conversationId),
+        builder: (context, snapshot) {
+          final messages = snapshot.data ?? const <ChatMsg>[];
           return Column(
             children: [
               Expanded(
@@ -119,7 +148,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         itemCount: messages.length,
                         itemBuilder: (_, i) {
                           final m = messages[i];
-                          final isMe = m.sender == 'me';
+                          final isMe = user != null && m.senderId == user.uid;
                           return _MessageBubble(message: m, isMe: isMe);
                         },
                       ),
@@ -127,8 +156,8 @@ class _ChatScreenState extends State<ChatScreen> {
               SafeArea(
                 top: false,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 6),
                   color: Colors.white,
                   child: Row(
                     children: [
@@ -150,8 +179,17 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       const SizedBox(width: 6),
                       IconButton.filled(
-                        onPressed: _send,
-                        icon: const Icon(Icons.send),
+                        onPressed: _sending ? null : _send,
+                        icon: _sending
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.send),
                       ),
                     ],
                   ),
@@ -166,7 +204,7 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class _MessageBubble extends StatelessWidget {
-  final ChatMessage message;
+  final ChatMsg message;
   final bool isMe;
 
   const _MessageBubble({required this.message, required this.isMe});

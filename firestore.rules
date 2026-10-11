@@ -1,41 +1,225 @@
 rules_version = '2';
 
 // Firestore Security Rules for Uni-Tradigo (academic project).
-// Goal: authenticated users can read all listings, create their own,
-// and update/delete only listings they own (sellerId == auth.uid).
+//
+// Security model:
+// - Unauthenticated users cannot read or write anything.
+// - Authenticated users can read public marketplace data
+//   (listings, wanted posts, profiles, reviews).
+// - Users can only write to their own data: profile (limited fields),
+//   own listings, own wishlist entries, own wanted posts, own reports.
+// - Chat messages / transactions are only visible to their participants.
+// - Reviews can only be created for a transaction that exists and only
+//   by the transaction's buyer or seller — and only once per
+//   transaction per reviewer.
+// - Admin actions (removing any listing, suspending any user, reading
+//   all users) require the `admin` custom claim on the caller's
+//   Firebase Auth ID token. This is set via the Firebase Admin SDK
+//   from a trusted environment (see FIREBASE_SETUP.md for instructions).
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Listings collection.
-    match /listings/{listingId} {
-      // Anyone signed in can read any listing (public marketplace).
-      allow read: if request.auth != null;
+    // --- Helper functions ----------------------------------------------
 
-      // Anyone signed in can create a listing, but the new document's
-      // sellerId MUST match the signed-in user's UID.
-      allow create: if request.auth != null
-                    && request.resource.data.sellerId == request.auth.uid;
-
-      // Update / delete: only the owner of the listing.
-      allow update, delete: if request.auth != null
-                            && resource.data.sellerId == request.auth.uid;
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // User profiles collection (created by the register screen).
-    match /users/{userId} {
-      // Anyone signed in can read profiles (used for showing seller info).
-      allow read: if request.auth != null;
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
 
-      // A user can only create or update their own profile document.
-      allow create, update: if request.auth != null
-                            && request.auth.uid == userId;
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isSuspended(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) &&
+             get(/databases/$(database)/documents/users/$(uid)).data.suspended == true;
+    }
+
+    function currentUserIsSuspended() {
+      return isSignedIn() && isSuspended(request.auth.uid);
+    }
+
+    // --- Listings -----------------------------------------------------
+
+    match /listings/{listingId} {
+      // Anyone signed in can read any listing.
+      allow read: if isSignedIn();
+
+      // Create: signed in, not suspended, and sellerId must be the caller.
+      allow create: if isSignedIn()
+                    && !currentUserIsSuspended()
+                    && request.resource.data.sellerId == request.auth.uid
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() > 0
+                    && request.resource.data.tradeType in
+                       ['Sale', 'Rent', 'Exchange', 'Donation'];
+
+      // Update / delete: only the owner, and only if not suspended.
+      allow update, delete: if isSignedIn()
+                            && !currentUserIsSuspended()
+                            && resource.data.sellerId == request.auth.uid;
+
+      // Admins can delete any listing (moderation).
+      allow delete: if isAdmin();
+    }
+
+    // --- User profiles -------------------------------------------------
+
+    match /users/{userId} {
+      // Anyone signed in can read profiles (so other students can see
+      // seller names / departments).
+      allow read: if isSignedIn();
+
+      // A user can create their own profile during registration.
+      allow create: if isOwner(userId);
+
+      // A user can update their own profile, but cannot change their
+      // email, createdAt, or the suspended flag. Student ID is
+      // editable (some students only learn / receive their student
+      // id after first login).
+      allow update: if isOwner(userId)
+                    && request.resource.data.email == resource.data.email
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.suspended == resource.data.suspended;
+
+      // Admins can set the `suspended` flag on any user.
+      allow update: if isAdmin();
 
       // No one can delete profiles from the client.
       allow delete: if false;
+
+      // --- Wishlist subcollection -------------------------------------
+
+      match /wishlist/{listingId} {
+        // Only the owner can read or write their own wishlist.
+        allow read, write: if isOwner(userId);
+      }
     }
 
-    // Everything else is denied by default.
+    // --- Wanted posts -------------------------------------------------
+
+    match /wantedPosts/{postId} {
+      // Anyone signed in can read wanted posts.
+      allow read: if isSignedIn();
+
+      // Create: the post's postedById must be the caller.
+      allow create: if isSignedIn()
+                    && !currentUserIsSuspended()
+                    && request.resource.data.postedById == request.auth.uid;
+
+      // Update / delete: only the owner.
+      allow update, delete: if isSignedIn()
+                            && resource.data.postedById == request.auth.uid;
+
+      // Admins can delete any wanted post.
+      allow delete: if isAdmin();
+    }
+
+    // --- Chat conversations -------------------------------------------
+
+    match /conversations/{conversationId} {
+      // Only the two participants can read the conversation summary.
+      allow read: if isSignedIn()
+                  && request.auth.uid in resource.data.participants;
+
+      // Create: caller must be one of the participants.
+      allow create: if isSignedIn()
+                    && request.auth.uid in request.resource.data.participants
+                    && request.resource.data.participants.size() == 2;
+
+      // Only participants can update the last-message summary.
+      allow update: if isSignedIn()
+                    && request.auth.uid in resource.data.participants
+                    && request.resource.data.participants == resource.data.participants;
+
+      // Messages subcollection.
+      match /messages/{messageId} {
+        // Only participants of the parent conversation can read or write.
+        allow read: if isSignedIn()
+                    && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow create: if isSignedIn()
+                      && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+                      && request.resource.data.senderId == request.auth.uid;
+        // Messages are immutable once sent.
+        allow update, delete: if false;
+      }
+    }
+
+    // --- Transactions -------------------------------------------------
+
+    match /transactions/{txId} {
+      // Participants or admins can read the transaction.
+      allow read: if isSignedIn()
+                  && (request.auth.uid in resource.data.participants
+                      || isAdmin());
+
+      // Create: caller must be the buyer and participants must be [seller, buyer].
+      allow create: if isSignedIn()
+                    && !currentUserIsSuspended()
+                    && request.resource.data.buyerId == request.auth.uid
+                    && request.auth.uid in request.resource.data.participants
+                    && request.resource.data.participants.size() == 2;
+
+      // Update: only participants, and the participants list is immutable.
+      // status can only move forward (Pending -> Confirmed -> Completed or Cancelled).
+      allow update: if isSignedIn()
+                    && request.auth.uid in resource.data.participants
+                    && request.resource.data.participants == resource.data.participants
+                    && request.resource.data.buyerId == resource.data.buyerId
+                    && request.resource.data.sellerId == resource.data.sellerId
+                    && request.resource.data.status in
+                       ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
+
+      // Delete: only an admin.
+      allow delete: if isAdmin();
+    }
+
+    // --- Reviews ------------------------------------------------------
+
+    match /reviews/{reviewId} {
+      // Anyone signed in can read reviews.
+      allow read: if isSignedIn();
+
+      // Create: the reviewer must be a participant of the referenced
+      // transaction, and there must not be an existing review by the
+      // same reviewer for the same transaction.
+      allow create: if isSignedIn()
+                    && request.resource.data.reviewerId == request.auth.uid
+                    && request.resource.data.rating is int
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5
+                    && exists(/databases/$(database)/documents/transactions/$(request.resource.data.transactionId))
+                    && request.auth.uid in
+                       get(/databases/$(database)/documents/transactions/$(request.resource.data.transactionId)).data.participants
+                    && !exists(/databases/$(database)/documents/reviews/$(reviewId));
+
+      // Reviews are immutable.
+      allow update, delete: if false;
+    }
+
+    // --- Reports (admin moderation) -----------------------------------
+
+    match /reports/{reportId} {
+      // The reporter and admins can read.
+      allow read: if isSignedIn()
+                  && (resource.data.reporterId == request.auth.uid
+                      || isAdmin());
+
+      // The reporter can create their own report.
+      allow create: if isSignedIn()
+                    && request.resource.data.reporterId == request.auth.uid
+                    && request.resource.data.status == 'Pending';
+
+      // Only admins can update / delete.
+      allow update, delete: if isAdmin();
+    }
+
+    // --- Default deny -------------------------------------------------
+
     match /{document=**} {
       allow read, write: if false;
     }

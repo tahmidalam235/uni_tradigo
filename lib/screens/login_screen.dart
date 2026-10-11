@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'register_screen.dart';
-import 'home_screen.dart';
 import '../widgets/custom_text_field.dart';
 import '../data/approved_emails.dart';
 import '../services/auth_service.dart';
@@ -47,10 +46,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _busy = true);
     try {
       await _authService.login(email: email, password: password);
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
+      // The main _AuthGate in main.dart listens to the auth state and
+      // will rebuild to HomeScreen automatically — no manual navigation
+      // is required here. Just clear any open dialogs/snackbars.
     } on AuthException catch (e) {
       if (!mounted) return;
       _showError(e.message);

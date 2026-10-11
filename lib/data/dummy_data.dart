@@ -195,18 +195,21 @@ class DummyData {
       id: 'c1',
       otherUserName: 'Abdullah',
       otherUserEmail: 'abdullah@bup.edu.bd',
+      otherUserId: '23524202002',
       lastMessage: 'Is this calculator available?',
     ),
     Conversation(
       id: 'c2',
       otherUserName: 'Sadia',
       otherUserEmail: 'sadia@bup.edu.bd',
+      otherUserId: '23524203003',
       lastMessage: 'I want to exchange this book.',
     ),
     Conversation(
       id: 'c3',
       otherUserName: 'Rifat',
       otherUserEmail: 'rifat@bup.edu.bd',
+      otherUserId: '23524204004',
       lastMessage: 'Can I collect tomorrow?',
     ),
   ];

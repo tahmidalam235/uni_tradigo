@@ -3,7 +3,6 @@ import '../widgets/custom_text_field.dart';
 import '../data/approved_emails.dart';
 import '../services/auth_service.dart';
 import '../services/user_service.dart';
-import 'home_screen.dart';
 
 // RegisterScreen — creates a Firebase Auth account and writes the matching
 // profile document to Firestore at users/{uid}.
@@ -72,13 +71,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         department: _department.text.trim(),
         email: email,
       );
-      if (!mounted) return;
-      // Skip the success dialog and go straight to Home so the flow
-      // matches LoginScreen.
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-        (route) => false,
-      );
+      // _AuthGate in main.dart listens to the auth state and will
+      // automatically rebuild to HomeScreen once Firebase confirms the
+      // new user is signed in. No manual navigation needed here.
     } on AuthException catch (e) {
       if (!mounted) return;
       _toast(e.message);

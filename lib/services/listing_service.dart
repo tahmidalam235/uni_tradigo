@@ -93,25 +93,36 @@ class ListingService {
 
   /// Streams listings that belong to [sellerUid], newest first.
   /// Used by the My Listings screen.
+  ///
+  /// NOTE: we deliberately do NOT use `.orderBy('createdAt', ...)` in the
+  /// Firestore query. The combination of `where('sellerId', ...)` plus an
+  /// `orderBy` requires a composite index. The single-field `sellerId`
+  /// index is created automatically by Firestore, so we fetch with just
+  /// the `where` and sort the results client-side in Dart.
   Stream<List<Item>> streamMyListings(String sellerUid) {
     return _listings
         .where('sellerId', isEqualTo: sellerUid)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => _toItem(d.id, d.data()))
-            .toList(growable: false));
+        .map((snap) {
+      final items = snap.docs
+          .map((d) => _toItem(d.id, d.data()))
+          .toList();
+      items.sort((a, b) => b.postedAt.compareTo(a.postedAt));
+      return List<Item>.unmodifiable(items);
+    });
   }
 
   /// One-shot fetch of the current user's listings.
+  /// See note on [streamMyListings] for why we sort client-side.
   Future<List<Item>> fetchMyListings(String sellerUid) async {
     final snap = await _listings
         .where('sellerId', isEqualTo: sellerUid)
-        .orderBy('createdAt', descending: true)
         .get();
-    return snap.docs
+    final items = snap.docs
         .map((d) => _toItem(d.id, d.data()))
-        .toList(growable: false);
+        .toList();
+    items.sort((a, b) => b.postedAt.compareTo(a.postedAt));
+    return List<Item>.unmodifiable(items);
   }
 
   /// Deletes a listing by id.
