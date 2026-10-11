@@ -140,7 +140,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.of(context).pop();
+              // Pop everything above the home screen so the user lands
+              // back on the home page after confirming the deal.
+              Navigator.of(context).popUntil((route) => route.isFirst);
             },
             child: const Text('Done'),
           ),

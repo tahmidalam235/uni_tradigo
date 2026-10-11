@@ -1,34 +1,25 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// ChatService — simple real-time chat between two students.
+/// ChatService — real-time chat between two students.
 ///
-/// Storage layout:
-///   conversations/{conversationId} = {
-///     participants : [uidA, uidB]   // sorted, exactly 2 entries
-///     participantNames: { uidA: "Name A", uidB: "Name B" }
-///     lastMessage  : String
-///     lastSenderId : String
-///     lastUpdatedAt: Timestamp
-///     createdAt    : Timestamp
-///   }
-///   conversations/{conversationId}/messages/{messageId} = {
-///     senderId   : String
-///     senderName : String
-///     text       : String
-///     createdAt  : Timestamp
-///   }
+/// Storage layout: a top-level `conversations` collection with a
+/// `messages` subcollection.
 ///
-/// The conversation id is derived deterministically from the two
-/// participant UIDs (sorted and joined) so two students always agree on
-/// the same conversation id without an extra "find or create" round-trip.
+///   conversations/{conversationId}
+///     - participants: [uidA, uidB]   (sorted)
+///     - participantNames: { uid: name }
+///     - lastMessage, lastSenderId, lastUpdatedAt
+///     - messages:  (subcollection)
+///         conversations/{conversationId}/messages/{messageId}
+///           - senderId, senderName, text, createdAt
+///
+/// Security is enforced by `firestore.rules`: only the two
+/// participants can read or write a conversation and its messages.
 class ChatService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _conversations =>
       _db.collection('conversations');
-
-  CollectionReference<Map<String, dynamic>> _messages(String conversationId) =>
-      _conversations.doc(conversationId).collection('messages');
 
   /// Computes a stable conversation id for a pair of user UIDs.
   /// Sorts so (a,b) and (b,a) always produce the same id.
@@ -37,16 +28,14 @@ class ChatService {
     return ids.join('__');
   }
 
-  /// Returns the existing conversation id between the current user and
-  /// [otherUid], or null if no conversation has been started yet.
-  Future<String?> findConversationId(String myUid, String otherUid) async {
-    final id = conversationIdFor(myUid, otherUid);
-    final snap = await _conversations.doc(id).get();
-    return snap.exists ? id : null;
-  }
+  DocumentReference<Map<String, dynamic>> _convoRef(String id) =>
+      _conversations.doc(id);
 
-  /// Ensures the conversation document exists with both participants
-  /// recorded. Returns the conversation id.
+  CollectionReference<Map<String, dynamic>> _messagesRef(String id) =>
+      _convoRef(id).collection('messages');
+
+  /// Ensures the conversation exists. Idempotent. Returns the
+  /// conversation id.
   Future<String> ensureConversation({
     required String myUid,
     required String myName,
@@ -54,47 +43,37 @@ class ChatService {
     required String otherName,
   }) async {
     final id = conversationIdFor(myUid, otherUid);
-    final ref = _conversations.doc(id);
-    final snap = await ref.get();
-    if (!snap.exists) {
-      await ref.set({
-        'participants': [myUid, otherUid]..sort(),
-        'participantNames': {
-          myUid: myName,
-          otherUid: otherName,
-        },
-        'lastMessage': '',
-        'lastSenderId': '',
-        'lastUpdatedAt': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } else {
-      // Backfill display names for users that joined earlier without one.
-      await ref.set({
-        'participantNames': {
-          myUid: myName,
-          otherUid: otherName,
-        },
-      }, SetOptions(merge: true));
-    }
+    final ref = _convoRef(id);
+    // set with merge: true won't create a new doc if it exists, and
+    // won't clobber existing fields on update.
+    final participants = [myUid, otherUid]..sort();
+    await ref.set({
+      'participants': participants,
+      'participantNames': {myUid: myName, otherUid: otherName},
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
     return id;
   }
 
   /// Streams the list of conversations the current user is part of,
-  /// newest activity first. Used by the Messages tab.
+  /// newest activity first.
   Stream<List<ConversationSummary>> streamMyConversations(String myUid) {
     return _conversations
         .where('participants', arrayContains: myUid)
-        .orderBy('lastUpdatedAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => _toSummary(myUid, d.id, d.data()))
-            .toList(growable: false));
+        .map((snap) {
+      final list = snap.docs
+          .map((d) => _toSummary(myUid, d.id, d.data()))
+          .toList(growable: false);
+      list.sort((a, b) => b.lastTime.compareTo(a.lastTime));
+      return list;
+    });
   }
 
   /// Streams the live messages of a conversation, oldest first.
-  Stream<List<ChatMsg>> streamMessages(String conversationId) {
-    return _messages(conversationId)
+  Stream<List<ChatMsg>> streamMessagesFor(
+      String myUid, String conversationId) {
+    return _messagesRef(conversationId)
         .orderBy('createdAt', descending: false)
         .snapshots()
         .map((snap) => snap.docs
@@ -102,28 +81,46 @@ class ChatService {
             .toList(growable: false));
   }
 
-  /// Sends a message in a conversation. Updates the conversation summary
-  /// (lastMessage, lastUpdatedAt) atomically via a Firestore batch.
+  /// Sends a message in a conversation. Writes to the message
+  /// subcollection and updates the parent conversation's last-*
+  /// summary fields so list views can sort by recency.
   Future<void> sendMessage({
     required String conversationId,
     required String senderId,
     required String senderName,
     required String text,
   }) async {
-    final batch = _db.batch();
-    final msgRef = _messages(conversationId).doc();
-    batch.set(msgRef, {
+    final convoRef = _convoRef(conversationId);
+    final msgRef = _messagesRef(conversationId).doc();
+    final convoSnap = await convoRef.get();
+    if (!convoSnap.exists) {
+      // The conversation was never initialized. Create it now so the
+      // first message isn't lost. (Caller normally opens the chat via
+      // ensureConversation, but this is a safety net.)
+      final parts = conversationId.split('__');
+      if (parts.length != 2) {
+        throw StateError('Malformed conversationId: $conversationId');
+      }
+      final otherUid = parts[0] == senderId ? parts[1] : parts[0];
+      await ensureConversation(
+        myUid: senderId,
+        myName: senderName,
+        otherUid: otherUid,
+        otherName: '',
+      );
+    }
+    final msg = <String, dynamic>{
       'senderId': senderId,
       'senderName': senderName,
       'text': text,
       'createdAt': FieldValue.serverTimestamp(),
-    });
-    batch.update(_conversations.doc(conversationId), {
+    };
+    await msgRef.set(msg);
+    await convoRef.set({
       'lastMessage': text,
       'lastSenderId': senderId,
       'lastUpdatedAt': FieldValue.serverTimestamp(),
-    });
-    await batch.commit();
+    }, SetOptions(merge: true));
   }
 
   // ----- helpers -----
@@ -143,6 +140,8 @@ class ChatService {
     DateTime lastTime;
     if (updated is Timestamp) {
       lastTime = updated.toDate();
+    } else if (updated is DateTime) {
+      lastTime = updated;
     } else {
       lastTime = DateTime.now();
     }
@@ -160,6 +159,8 @@ class ChatService {
     DateTime time;
     if (created is Timestamp) {
       time = created.toDate();
+    } else if (created is DateTime) {
+      time = created;
     } else {
       time = DateTime.now();
     }

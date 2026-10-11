@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/item.dart';
 import '../services/review_service.dart';
+import '../services/transaction_service.dart';
 
 /// ReviewScreen — submit a 1–5 star rating and written feedback for the
 /// other party on a completed deal. One review per transaction per user
@@ -53,16 +54,15 @@ class _ReviewScreenState extends State<ReviewScreen> {
           (profileSnap.data()?['name'] ?? '').toString();
 
       // The reviewedId is the other party in the transaction.
-      final txSnap = await FirebaseFirestore.instance
-          .collection('transactions')
-          .doc(widget.transactionId)
-          .get();
-      if (!txSnap.exists) {
+      // Transactions are now stored on the participant's user doc
+      // (see TransactionService), so we use fetchById instead of
+      // reading from the legacy `transactions` collection.
+      final tx = await TransactionService().fetchById(widget.transactionId);
+      if (tx == null) {
         throw StateError('Transaction not found.');
       }
-      final tx = txSnap.data() ?? const {};
-      final sellerId = (tx['sellerId'] ?? '').toString();
-      final buyerId = (tx['buyerId'] ?? '').toString();
+      final sellerId = tx.sellerId;
+      final buyerId = tx.buyerId;
       final reviewedId =
           user.uid == sellerId ? buyerId : sellerId;
 

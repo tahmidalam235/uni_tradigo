@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/app_state.dart';
 import '../models/item.dart';
-import '../services/chat_service.dart';
 import '../services/listing_service.dart';
 import '../services/report_service.dart';
 import '../services/wishlist_service.dart';
@@ -442,27 +441,15 @@ class ItemDetailsScreen extends StatelessWidget {
       );
       return;
     }
-    // My display name.
-    final profileSnap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    final myName = (profileSnap.data()?['name'] ?? '').toString();
-    final chat = ChatService();
-    final convoId = await chat.ensureConversation(
-      myUid: user.uid,
-      myName: myName,
-      otherUid: item.sellerId,
-      otherName: item.sellerName,
-    );
-    if (!context.mounted) return;
+    // Open the chatbox immediately. The screen itself initializes the
+    // conversation (idempotent) and streams messages — no need to
+    // await any Firestore write before navigating.
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           peerName: item.sellerName,
           peerEmail: item.sellerEmail,
           peerUid: item.sellerId,
-          conversationId: convoId,
         ),
       ),
     );

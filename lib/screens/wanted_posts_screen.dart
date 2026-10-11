@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/item.dart';
 import '../services/wanted_service.dart';
-import '../services/chat_service.dart';
 import 'chat_screen.dart';
 
 /// WantedPostsScreen — shows wanted requests from other students.
@@ -62,6 +61,7 @@ class WantedPostsScreen extends StatelessWidget {
               );
               return _WantedCard(
                 post: post,
+                ownerUid: ownerUid,
                 isMine: isMine,
                 onContact: () => _contact(context, post, ownerUid),
                 onEdit: () => _openEditor(context, post),
@@ -83,35 +83,18 @@ class WantedPostsScreen extends StatelessWidget {
       );
       return;
     }
-    final myName = await _readMyName();
-    final chat = ChatService();
-    final convoId = await chat.ensureConversation(
-      myUid: user.uid,
-      myName: myName,
-      otherUid: ownerUid,
-      otherName: p.postedBy,
-    );
-    if (!context.mounted) return;
+    // Open the chatbox immediately. The screen itself initializes
+    // the conversation (idempotent) and streams messages — no need to
+    // await any Firestore write before navigating.
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           peerName: p.postedBy,
           peerEmail: '',
           peerUid: ownerUid,
-          conversationId: convoId,
         ),
       ),
     );
-  }
-
-  Future<String> _readMyName() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return '';
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    return (snap.data()?['name'] ?? '').toString();
   }
 
   DateTime _toDt(dynamic v) =>
@@ -126,11 +109,13 @@ class WantedPostsScreen extends StatelessWidget {
 
 class _WantedCard extends StatelessWidget {
   final WantedPost post;
+  final String ownerUid;
   final bool isMine;
   final VoidCallback onContact;
   final VoidCallback onEdit;
   const _WantedCard({
     required this.post,
+    required this.ownerUid,
     required this.isMine,
     required this.onContact,
     required this.onEdit,
@@ -138,7 +123,11 @@ class _WantedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    // The card itself is tappable for the owner: tapping their own post
+    // opens the editor. For other users' posts the card body is not
+    // tappable — the explicit "Contact Student" button is the call to
+    // action so we don't accidentally open the editor for someone else.
+    final card = Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -179,7 +168,10 @@ class _WantedCard extends StatelessWidget {
                         );
                         if (ok == true) {
                           try {
-                            await WantedService().delete(post.id);
+                            await WantedService().delete(
+                              uid: ownerUid,
+                              id: post.id,
+                            );
                           } catch (e) {
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -222,17 +214,33 @@ class _WantedCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
+            // For our own posts, show an "Edit" button (also tappable
+            // anywhere on the card). For other students' posts, show
+            // "Contact Student" so they can open a chat with the post
+            // owner.
             Align(
               alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: isMine ? null : onContact,
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Contact Student'),
-              ),
+              child: isMine
+                  ? OutlinedButton.icon(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit'),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: onContact,
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Contact Student'),
+                    ),
             ),
           ],
         ),
       ),
+    );
+    if (!isMine) return card;
+    return InkWell(
+      onTap: onEdit,
+      borderRadius: BorderRadius.circular(12),
+      child: card,
     );
   }
 }
@@ -298,6 +306,7 @@ class _WantedEditorState extends State<_WantedEditor> {
         );
       } else {
         await _service.update(
+          uid: user.uid,
           id: widget.existing!.id,
           title: _title.text.trim(),
           description: _desc.text.trim(),

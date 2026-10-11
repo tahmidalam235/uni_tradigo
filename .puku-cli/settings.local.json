@@ -32,7 +32,13 @@
       "Bash(gsutil ls:*)",
       "Bash(firebase firestore:rules:get --project uni-tradigo-f12fe)",
       "Bash(firebase --help)",
-      "Bash(flutter install:*)"
+      "Bash(flutter install:*)",
+      "WebFetch(domain:firebase.google.com)",
+      "WebFetch(domain:pub.dev)",
+      "Bash(find lib:*)",
+      "Bash(2)",
+      "Bash(firebase use:*)",
+      "Bash(firebase firestore:indexes)"
     ]
   }
 }

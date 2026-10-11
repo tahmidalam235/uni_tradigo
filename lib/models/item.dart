@@ -61,6 +61,7 @@ class WantedPost {
   final String title;
   final String description;
   final String postedBy;
+  final String postedById;
   final String department;
   final DateTime postedAt;
 
@@ -69,6 +70,7 @@ class WantedPost {
     required this.title,
     required this.description,
     required this.postedBy,
+    this.postedById = '',
     required this.department,
     DateTime? postedAt,
   }) : postedAt = postedAt ?? DateTime.now();
