@@ -2,17 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../data/app_state.dart';
 import '../models/item.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/info_pill.dart';
+import '../widgets/verified_badge.dart';
 import 'item_details_screen.dart';
 import '../services/listing_service.dart';
 import '../services/wishlist_service.dart';
 
 /// WishlistScreen — listings the current user has saved.
-///
-/// Loads the user's wishlist ids from `users/{uid}/wishlist`, then
-/// resolves each id into a full `Item` (either from the in-memory
-/// AppState cache or, if not cached yet, directly from Firestore) so
-/// the page works correctly even if the Home tab has never been
-/// visited.
 class WishlistScreen extends StatefulWidget {
   final bool embedded;
   const WishlistScreen({super.key, this.embedded = false});
@@ -38,7 +37,6 @@ class _WishlistScreenState extends State<WishlistScreen> {
               ? const Stream<Set<String>>.empty()
               : _wishlistService.streamWishlistIds(uid),
           builder: (context, snapshot) {
-            // Keep AppState in sync with the Firestore truth.
             final ids = snapshot.data ?? <String>{};
             if (snapshot.hasData) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -46,67 +44,35 @@ class _WishlistScreenState extends State<WishlistScreen> {
               });
             }
 
-            // 1) Not logged in.
             if (uid.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Text('Please log in to view your wishlist.'),
-                ),
+              return const EmptyState(
+                icon: Icons.lock_outline_rounded,
+                title: 'Please log in',
+                subtitle: 'Sign in to view your wishlist.',
               );
             }
 
-            // 2) Error.
             if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline,
-                          color: Colors.red, size: 48),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Could not load your wishlist.',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Details: ${snapshot.error}',
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black54),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
+              return ErrorState(
+                message: 'Details: ${snapshot.error}',
+                onRetry: () => setState(() {}),
               );
             }
 
-            // 3) Still waiting for the very first event.
             if (snapshot.connectionState == ConnectionState.waiting &&
                 !snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            // 4) No items saved.
             if (ids.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Text(
-                    "You haven't added anything to your wishlist yet.",
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+              return const EmptyState(
+                icon: Icons.favorite_border_rounded,
+                title: 'Your wishlist is empty',
+                subtitle:
+                    'Save items you like by tapping the heart on any listing.',
               );
             }
 
-            // 5) Resolve ids → Item. Prefer the in-memory cache (kept in
-            //    sync by HomeScreen); fall back to a direct Firestore
-            //    fetch so the screen works even if Home was never opened.
             final items = <Item>[];
             final missing = <String>[];
             for (final id in ids) {
@@ -122,83 +88,55 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   ? Future<List<Item>>.value(const <Item>[])
                   : _fetchListings(missing),
               builder: (context, fbSnapshot) {
-                if (missing.isNotEmpty && fbSnapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                      child: CircularProgressIndicator());
+                if (missing.isNotEmpty &&
+                    fbSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
                 }
                 if (missing.isNotEmpty && fbSnapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        'Could not load listing details: '
-                        '${fbSnapshot.error}',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                  return ErrorState(
+                    message:
+                        'Could not load listing details: ${fbSnapshot.error}',
+                    onRetry: () => setState(() {}),
                   );
                 }
                 final fetched = fbSnapshot.data ?? const <Item>[];
                 items.addAll(fetched);
 
                 if (items.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text(
-                        "You haven't added anything to your wishlist yet.",
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                  return const EmptyState(
+                    icon: Icons.favorite_border_rounded,
+                    title: 'Your wishlist is empty',
+                    subtitle:
+                        'Save items you like by tapping the heart on any listing.',
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
                   itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (_, i) {
                     final item = items[i];
-                    return Card(
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.1),
-                          child: Icon(
-                            Icons.shopping_bag,
-                            color: Theme.of(context).colorScheme.primary,
+                    return _WishlistCard(
+                      item: item,
+                      onOpen: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ItemDetailsScreen(itemId: item.id),
                           ),
-                        ),
-                        title: Text(item.title,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(item.priceLabel),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.red),
-                          onPressed: () async {
-                            try {
-                              await _wishlistService.remove(uid, item.id);
-                            } catch (e) {
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content:
-                                        Text('Could not remove: $e')),
-                              );
-                            }
-                          },
-                        ),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  ItemDetailsScreen(itemId: item.id),
-                            ),
+                        );
+                      },
+                      onRemove: () async {
+                        try {
+                          await _wishlistService.remove(uid, item.id);
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Could not remove: $e')),
                           );
-                        },
-                      ),
+                        }
+                      },
                     );
                   },
                 );
@@ -216,11 +154,123 @@ class _WishlistScreenState extends State<WishlistScreen> {
     );
   }
 
-  // Fetch listings by id in parallel; skip ids that no longer exist.
   Future<List<Item>> _fetchListings(List<String> ids) async {
     final results = await Future.wait(
       ids.map((id) => _listingService.fetchListingById(id)),
     );
     return results.whereType<Item>().toList(growable: false);
+  }
+}
+
+class _WishlistCard extends StatelessWidget {
+  final Item item;
+  final VoidCallback onOpen;
+  final VoidCallback onRemove;
+  const _WishlistCard({
+    required this.item,
+    required this.onOpen,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: item.imageUrl.isNotEmpty
+                    ? Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.shopping_bag_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 30,
+                        ),
+                      )
+                    : Icon(
+                        Icons.shopping_bag_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 30,
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.titleSmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.priceLabel,
+                      style: AppTypography.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: item.price <= 0
+                            ? AppColors.success
+                            : AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const VerifiedBadge(size: 12),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            item.sellerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                children: [
+                  if (item.isAvailable)
+                    const InfoPill(
+                      icon: Icons.check_circle_outline_rounded,
+                      label: 'Available',
+                      color: AppColors.success,
+                    )
+                  else
+                    const InfoPill(
+                      icon: Icons.do_not_disturb_on_outlined,
+                      label: 'Unavailable',
+                      color: AppColors.danger,
+                    ),
+                  const SizedBox(height: 8),
+                  IconButton(
+                    tooltip: 'Remove',
+                    icon: const Icon(Icons.heart_broken_rounded),
+                    color: AppColors.danger,
+                    onPressed: onRemove,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

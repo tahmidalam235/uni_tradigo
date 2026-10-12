@@ -2,18 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../data/app_state.dart';
 import '../models/item.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/status_pill.dart';
 import '../services/listing_service.dart';
 import 'add_listing_screen.dart';
 
-// MyListingsScreen — listings posted by the currently signed-in user.
-// Loads from Firestore filtered by the Firebase Auth UID.
-//
-// Important: the Firestore query
-//   listings.where('sellerId', isEqualTo: <uid>).orderBy('createdAt', descending: true)
-// requires a composite index on (sellerId ASC, createdAt DESC). The
-// index is declared in firestore.indexes.json. Without it Firestore
-// returns an index-required error and the screen will appear empty.
-
+/// MyListingsScreen — listings posted by the currently signed-in user.
 class MyListingsScreen extends StatelessWidget {
   const MyListingsScreen({super.key});
 
@@ -30,88 +26,47 @@ class MyListingsScreen extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const AddListingScreen()),
           );
         },
-        icon: const Icon(Icons.add),
-        label: const Text('New'),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New listing'),
       ),
       body: user == null
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Text(
-                  'You must be logged in to view your listings.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
+          ? const EmptyState(
+              icon: Icons.lock_outline_rounded,
+              title: 'Please log in',
+              subtitle: 'You must be logged in to view your listings.',
             )
           : StreamBuilder<List<Item>>(
               stream: listingService.streamMyListings(user.uid),
               builder: (context, snapshot) {
-                // 1) Loading: show a spinner on the very first build only.
                 if (snapshot.connectionState == ConnectionState.waiting &&
                     !snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-
-                // 2) Error: show a friendly message + retry hint.
                 if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.error_outline,
-                              color: Colors.red, size: 48),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Could not load your listings.',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'If you just added a Firestore index, '
-                            'wait a minute and try again.\n'
-                            'Details: ${snapshot.error}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.black54),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
+                  return ErrorState(
+                    message:
+                        'If you just added a Firestore index, wait a minute and try again.\nDetails: ${snapshot.error}',
+                    onRetry: () => Navigator.of(context).pop(),
                   );
                 }
-
-                // 3) Loaded: items from Firestore.
                 final items = snapshot.data ?? const <Item>[];
-
-                // 4) Empty: only show the empty state when we are
-                //    confident the query is done and really returned 0.
                 if (items.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text(
-                        'You have not posted anything yet.\n'
-                        'Tap "New" to post a listing.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                  return const EmptyState(
+                    icon: Icons.post_add_rounded,
+                    title: 'No listings yet',
+                    subtitle:
+                        'Tap "New listing" to post your first item for the campus.',
                   );
                 }
-
-                // 5) Show the list.
                 return RefreshIndicator(
                   onRefresh: () async {
-                    // Firestore streams auto-refresh; this is just a
-                    // visual cue that pulling down will re-query.
                     await Future<void>.delayed(
                         const Duration(milliseconds: 300));
                   },
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
                     itemCount: items.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (_, i) {
                       final item = items[i];
                       return _MyListingCard(
@@ -141,42 +96,84 @@ class _MyListingCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: item.imageUrl.isNotEmpty
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        item.imageUrl,
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => CircleAvatar(
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primary,
-                          child: Icon(
-                            Icons.shopping_bag,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: item.imageUrl.isNotEmpty
+                      ? Image.network(
+                          item.imageUrl,
+                          width: 64,
+                          height: 64,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Icon(
+                            Icons.shopping_bag_rounded,
                             color: Theme.of(context).colorScheme.primary,
+                            size: 30,
                           ),
+                        )
+                      : Icon(
+                          Icons.shopping_bag_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 30,
+                        ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.priceLabel,
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: item.price <= 0
+                              ? AppColors.success
+                              : AppColors.textPrimary,
                         ),
                       ),
-                    )
-                  : CircleAvatar(
-                      backgroundColor: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.1),
-                      child: Icon(Icons.shopping_bag,
-                          color: Theme.of(context).colorScheme.primary),
-                    ),
-              title: Text(item.title,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(
-                '${item.priceLabel} • ${item.tradeType}\n'
-                'Status: ${item.isAvailable ? "Active" : "Archived"}',
-              ),
-              isThreeLine: true,
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          StatusPill(
+                            label: item.tradeType,
+                            tone: StatusTone.info,
+                          ),
+                          StatusPill(
+                            label: item.isAvailable ? 'Active' : 'Archived',
+                            tone: item.isAvailable
+                                ? StatusTone.success
+                                : StatusTone.neutral,
+                            icon: item.isAvailable
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.archive_outlined,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -210,8 +207,7 @@ class _MyListingCard extends StatelessWidget {
                         ? Icons.archive_outlined
                         : Icons.unarchive_outlined,
                   ),
-                  label: Text(
-                      item.isAvailable ? 'Archive' : 'Activate'),
+                  label: Text(item.isAvailable ? 'Archive' : 'Activate'),
                 ),
                 TextButton.icon(
                   onPressed: () {
@@ -226,7 +222,10 @@ class _MyListingCard extends StatelessWidget {
                             onPressed: () => Navigator.pop(ctx),
                             child: const Text('Cancel'),
                           ),
-                          TextButton(
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.danger,
+                            ),
                             onPressed: () async {
                               try {
                                 await listingService.deleteListing(item.id);
@@ -242,17 +241,18 @@ class _MyListingCard extends StatelessWidget {
                                 );
                               }
                             },
-                            child: const Text('Delete',
-                                style: TextStyle(color: Colors.red)),
+                            child: const Text('Delete'),
                           ),
                         ],
                       ),
                     );
                   },
-                  icon: const Icon(Icons.delete_outline,
-                      color: Colors.red),
-                  label: const Text('Delete',
-                      style: TextStyle(color: Colors.red)),
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      color: AppColors.danger),
+                  label: const Text(
+                    'Delete',
+                    style: TextStyle(color: AppColors.danger),
+                  ),
                 ),
               ],
             ),

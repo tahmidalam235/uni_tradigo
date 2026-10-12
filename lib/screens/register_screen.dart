@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../widgets/custom_text_field.dart';
+import '../widgets/busy_button.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 import '../data/approved_emails.dart';
 import '../services/auth_service.dart';
 import '../services/user_service.dart';
 
-// RegisterScreen — creates a Firebase Auth account and writes the matching
-// profile document to Firestore at users/{uid}.
-
+/// RegisterScreen — creates a Firebase Auth account and writes the
+/// matching profile document to Firestore at users/{uid}.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -48,7 +50,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // Approved-email gate (exact match, trimmed, lowercased).
     if (!isApprovedEmail(email)) {
       _toast('This email is not authorized to use Uni-Tradigo.');
       return;
@@ -71,9 +72,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         department: _department.text.trim(),
         email: email,
       );
-      // _AuthGate in main.dart listens to the auth state and will
-      // automatically rebuild to HomeScreen once Firebase confirms the
-      // new user is signed in. No manual navigation needed here.
     } on AuthException catch (e) {
       if (!mounted) return;
       _toast(e.message);
@@ -106,18 +104,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 4),
                 const Text(
                   'Join the campus marketplace',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: AppTypography.titleLarge,
                 ),
-                const SizedBox(height: 4),
-                Text(
+                const SizedBox(height: 6),
+                const Text(
                   'Only verified university students can register.',
-                  style: TextStyle(color: Colors.grey.shade700),
+                  style: AppTypography.bodySmall,
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 22),
                 CustomTextField(
                   label: 'Full Name',
                   controller: _name,
-                  prefixIcon: Icons.person_outline,
+                  prefixIcon: Icons.person_outline_rounded,
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
@@ -134,7 +132,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   label: 'University Email',
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
+                  prefixIcon: Icons.alternate_email_rounded,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Required';
                     if (!v.contains('@')) return 'Enter a valid email';
@@ -154,7 +152,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   label: 'Password',
                   controller: _password,
                   obscureText: true,
-                  prefixIcon: Icons.lock_outline,
+                  prefixIcon: Icons.lock_outline_rounded,
                   validator: (v) =>
                       v == null || v.length < 6 ? 'Min 6 characters' : null,
                 ),
@@ -163,32 +161,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   label: 'Confirm Password',
                   controller: _confirm,
                   obscureText: true,
-                  prefixIcon: Icons.lock_outline,
+                  prefixIcon: Icons.lock_outline_rounded,
                   validator: (v) =>
                       v == null || v.length < 6 ? 'Min 6 characters' : null,
                 ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _busy ? null : _submit,
-                  child: _busy
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Create Account'),
+                const SizedBox(height: 24),
+                BusyButton(
+                  onPressed: _submit,
+                  busy: _busy,
+                  label: 'Create Account',
+                  icon: Icons.person_add_alt_1_rounded,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  'Note: University email verification is planned for the real backend version.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.outlineSoft),
                   ),
-                  textAlign: TextAlign.center,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        color: AppColors.textSecondary,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'University email verification is planned for the real backend version.',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

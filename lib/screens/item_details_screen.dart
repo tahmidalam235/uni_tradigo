@@ -4,17 +4,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/app_state.dart';
 import '../models/item.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import '../widgets/info_pill.dart';
+import '../widgets/section_header.dart';
+import '../widgets/status_pill.dart';
+import '../widgets/user_avatar.dart';
+import '../widgets/verified_badge.dart';
 import '../services/listing_service.dart';
 import '../services/report_service.dart';
 import '../services/wishlist_service.dart';
 import 'chat_screen.dart';
 import 'transaction_screen.dart';
 
-// ItemDetailsScreen — the most important screen for matching the proposal UI.
-// Shows full item details, seller info, action buttons.
-// TODO: Replace static data with Firestore document by id:
-//   await FirebaseFirestore.instance.collection('items').doc(itemId).get();
-
+/// ItemDetailsScreen — full item details, seller info, action buttons.
 class ItemDetailsScreen extends StatelessWidget {
   final String itemId;
 
@@ -94,8 +98,8 @@ class ItemDetailsScreen extends StatelessWidget {
                 tooltip: isWished ? 'Remove from wishlist' : 'Add to wishlist',
                 onPressed: () async => _toggleWishlist(context, appState, item.id),
                 icon: Icon(
-                  isWished ? Icons.favorite : Icons.favorite_border,
-                  color: isWished ? Colors.red : Colors.white,
+                  isWished ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  color: isWished ? AppColors.danger : null,
                 ),
               ),
               if (_canReport(context, item))
@@ -111,16 +115,18 @@ class ItemDetailsScreen extends StatelessWidget {
               // Hero image area — shows the Firestore image if available,
               // otherwise falls back to a category-icon placeholder.
               Container(
-                height: 220,
+                height: 240,
                 width: double.infinity,
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                decoration: BoxDecoration(
+                  gradient: AppColors.brandGradient,
+                ),
                 child: item.imageUrl.isNotEmpty
                     ? _buildImage(context, item)
                     : Center(
                         child: Icon(
                           _categoryIcon(item.category),
                           size: 100,
-                          color: Theme.of(context).colorScheme.primary,
+                          color: Colors.white.withValues(alpha: 0.85),
                         ),
                       ),
               ),
@@ -130,125 +136,115 @@ class ItemDetailsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Text(
                             item.title,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: AppTypography.headlineSmall,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: item.isAvailable
-                                ? Colors.green.shade100
-                                : Colors.red.shade100,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            item.isAvailable ? 'Available' : 'Unavailable',
-                            style: TextStyle(
-                              color: item.isAvailable
-                                  ? Colors.green.shade800
-                                  : Colors.red.shade800,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
+                        const SizedBox(width: 8),
+                        StatusPill(
+                          label: item.isAvailable ? 'Available' : 'Unavailable',
+                          tone: item.isAvailable
+                              ? StatusTone.success
+                              : StatusTone.danger,
+                          icon: item.isAvailable
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.do_not_disturb_on_outlined,
+                          fontSize: 11,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: AppSpacing.sm),
                     Text(
                       item.priceLabel,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                      style: AppTypography.headlineSmall.copyWith(
+                        color: item.price <= 0
+                            ? AppColors.success
+                            : AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _infoPill('Condition', item.condition),
-                        _infoPill('Type', item.tradeType),
-                        _infoPill('Category', item.category),
-                        _infoPill('Pickup', item.pickupLocation),
+                        _metaPill(
+                          icon: Icons.verified_outlined,
+                          label: item.condition,
+                          tone: StatusTone.info,
+                        ),
+                        _metaPill(
+                          icon: Icons.swap_horiz_rounded,
+                          label: item.tradeType,
+                          tone: StatusTone.primary,
+                        ),
+                        _metaPill(
+                          icon: Icons.category_outlined,
+                          label: item.category,
+                          tone: StatusTone.neutral,
+                        ),
+                        _metaPill(
+                          icon: Icons.place_outlined,
+                          label: item.pickupLocation,
+                          tone: StatusTone.neutral,
+                        ),
                       ],
                     ),
-                    const Divider(height: 32),
-                    const Text(
-                      'Description',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 6),
+                    const Divider(height: AppSpacing.xxl),
+                    const SectionHeader(title: 'Description'),
+                    const SizedBox(height: AppSpacing.sm),
                     Text(
                       item.description,
-                      style: TextStyle(color: Colors.grey.shade800, height: 1.4),
+                      style: AppTypography.bodyMedium.copyWith(height: 1.4),
                     ),
-                    const Divider(height: 32),
-                    const Text(
-                      'Seller',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
+                    const Divider(height: AppSpacing.xxl),
+                    const SectionHeader(title: 'Seller'),
+                    const SizedBox(height: AppSpacing.md),
                     Row(
                       children: [
-                        CircleAvatar(
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primary,
-                          child: Text(
-                            item.sellerName.isNotEmpty
-                                ? item.sellerName[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
+                        UserAvatar(name: item.sellerName, radius: 24),
+                        const SizedBox(width: AppSpacing.md),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  Text(
-                                    item.sellerName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
+                                  Flexible(
+                                    child: Text(
+                                      item.sellerName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTypography.titleMedium,
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.verified,
-                                      color: Colors.green, size: 16),
+                                  const SizedBox(width: 4),
+                                  const VerifiedBadge(size: 14),
                                 ],
                               ),
+                              const SizedBox(height: 2),
                               Text(
                                 'ID: ${item.sellerId}',
-                                style: TextStyle(
-                                    color: Colors.grey.shade700, fontSize: 12),
+                                style: AppTypography.bodySmall,
                               ),
                               Text(
                                 item.sellerEmail,
-                                style: TextStyle(
-                                    color: Colors.grey.shade700, fontSize: 12),
+                                style: AppTypography.bodySmall,
                               ),
                             ],
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Posted: ${_formatTime(item.postedAt)}',
-                      style: TextStyle(
-                          color: Colors.grey.shade600, fontSize: 12),
+                    const SizedBox(height: AppSpacing.md),
+                    InfoPill(
+                      icon: Icons.schedule_rounded,
+                      label: 'Posted ${_formatTime(item.postedAt)}',
                     ),
-                    const SizedBox(height: 90),
+                    const SizedBox(height: 100),
                   ],
                 ),
               ),
@@ -258,14 +254,12 @@ class ItemDetailsScreen extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
                   ),
-                ],
+                ),
               ),
               // When the current user is the seller, show Wishlist + a
               // single Update Status button (Available/Unavailable) and
@@ -281,9 +275,9 @@ class ItemDetailsScreen extends StatelessWidget {
                                 context, appState, item.id),
                             icon: Icon(
                               isWished
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              color: Colors.red,
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              color: isWished ? AppColors.danger : null,
                             ),
                             label: Text(
                                 isWished ? 'Wishlisted' : 'Wishlist'),
@@ -291,7 +285,7 @@ class ItemDetailsScreen extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: ElevatedButton.icon(
+                          child: FilledButton.icon(
                             onPressed: item.isAvailable
                                 ? () => _setAvailability(
                                       context, appState, item, false,
@@ -321,9 +315,9 @@ class ItemDetailsScreen extends StatelessWidget {
                                 context, appState, item.id),
                             icon: Icon(
                               isWished
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              color: Colors.red,
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              color: isWished ? AppColors.danger : null,
                             ),
                             label: Text(
                                 isWished ? 'Wishlisted' : 'Wishlist'),
@@ -335,13 +329,13 @@ class ItemDetailsScreen extends StatelessWidget {
                             onPressed: item.sellerId.isEmpty
                                 ? null
                                 : () => _openChat(context, item),
-                            icon: const Icon(Icons.chat_bubble_outline),
+                            icon: const Icon(Icons.chat_bubble_outline_rounded),
                             label: const Text('Chat'),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: ElevatedButton.icon(
+                          child: FilledButton.icon(
                             onPressed: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
@@ -351,7 +345,7 @@ class ItemDetailsScreen extends StatelessWidget {
                               );
                             },
                             icon:
-                                const Icon(Icons.shopping_cart_checkout),
+                                const Icon(Icons.shopping_cart_checkout_rounded),
                             label: const Text('Buy'),
                           ),
                         ),
@@ -482,7 +476,7 @@ class ItemDetailsScreen extends StatelessWidget {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Submit'),
           ),
@@ -517,44 +511,33 @@ class ItemDetailsScreen extends StatelessWidget {
     }
   }
 
-  Widget _infoPill(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text.rich(
-        TextSpan(
-          text: '$label: ',
-          style: TextStyle(
-              color: Colors.grey.shade700, fontWeight: FontWeight.w500),
-          children: [
-            TextSpan(
-              text: value,
-              style: const TextStyle(
-                  color: Colors.black87, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-      ),
+  Widget _metaPill({
+    required IconData icon,
+    required String label,
+    required StatusTone tone,
+  }) {
+    return StatusPill(
+      label: label.isEmpty ? '—' : label,
+      tone: tone,
+      icon: icon,
+      fontSize: 11,
     );
   }
 
   IconData _categoryIcon(String cat) {
     switch (cat) {
       case 'Books':
-        return Icons.menu_book;
+        return Icons.menu_book_rounded;
       case 'Electronics':
-        return Icons.devices;
+        return Icons.devices_rounded;
       case 'Calculator':
-        return Icons.calculate;
+        return Icons.calculate_rounded;
       case 'Accessories':
-        return Icons.lightbulb_outline;
+        return Icons.lightbulb_outline_rounded;
       case 'Furniture':
-        return Icons.chair;
+        return Icons.chair_rounded;
       default:
-        return Icons.shopping_bag;
+        return Icons.shopping_bag_rounded;
     }
   }
 

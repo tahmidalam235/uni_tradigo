@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/item.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import '../widgets/busy_button.dart';
+import '../widgets/section_header.dart';
+import '../widgets/user_avatar.dart';
 import '../services/review_service.dart';
 import '../services/transaction_service.dart';
 
@@ -79,11 +85,24 @@ class _ReviewScreenState extends State<ReviewScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
+          icon: Container(
+            width: 64,
+            height: 64,
+            decoration: const BoxDecoration(
+              color: AppColors.warningContainer,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.star_rounded,
+              color: AppColors.warning,
+              size: 36,
+            ),
+          ),
           title: const Text('Thanks for your review!'),
           content: Text(
-              'You rated ${widget.item.sellerName} $_rating stars.'),
+              'You rated ${widget.item.sellerName} $_rating star${_rating == 1 ? '' : 's'}.'),
           actions: [
-            TextButton(
+            FilledButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 Navigator.of(context).popUntil((r) => r.isFirst);
@@ -108,50 +127,85 @@ class _ReviewScreenState extends State<ReviewScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Rate & Review')),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
-          Text(
-            'Rate your experience with ${widget.item.sellerName}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16),
+          // Seller card header
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Row(
+                children: [
+                  UserAvatar(name: widget.item.sellerName, radius: 24),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.item.sellerName.isEmpty
+                              ? 'Seller'
+                              : widget.item.sellerName,
+                          style: AppTypography.titleMedium,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(5, (i) {
-              final filled = i < _rating;
-              return IconButton(
-                iconSize: 36,
-                onPressed: () => setState(() => _rating = i + 1),
-                icon: Icon(
-                  filled ? Icons.star : Icons.star_border,
-                  color: Colors.amber,
-                ),
-              );
-            }),
+          const SectionHeader(
+            title: 'How would you rate this deal?',
+            padding: EdgeInsets.fromLTRB(0, 24, 0, 12),
           ),
-          const SizedBox(height: 12),
+          // Stars row
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (i) {
+                final filled = i < _rating;
+                return IconButton(
+                  iconSize: 40,
+                  onPressed: () => setState(() => _rating = i + 1),
+                  icon: Icon(
+                    filled ? Icons.star_rounded : Icons.star_border_rounded,
+                    color: AppColors.warning,
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
           TextField(
             controller: _feedback,
             maxLines: 4,
             decoration: InputDecoration(
               labelText: 'Write your feedback...',
+              alignLabelWithHint: true,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
             ),
           ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: _busy ? null : _submit,
-            icon: const Icon(Icons.send),
-            label: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Submit Review'),
+          const SizedBox(height: AppSpacing.xl),
+          BusyButton(
+            onPressed: _submit,
+            busy: _busy,
+            label: 'Submit Review',
+            icon: Icons.send_rounded,
+            expand: true,
           ),
         ],
       ),

@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/item.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
+import '../widgets/busy_button.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/info_pill.dart';
+import '../widgets/status_pill.dart';
+import '../widgets/user_avatar.dart';
+import '../widgets/verified_badge.dart';
 import '../services/wanted_service.dart';
 import 'chat_screen.dart';
 
@@ -30,16 +38,18 @@ class WantedPostsScreen extends StatelessWidget {
               !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (snapshot.hasError) {
+            return ErrorState(
+              message: 'Details: ${snapshot.error}',
+              onRetry: () => (context as Element).markNeedsBuild(),
+            );
+          }
           final docs = snapshot.data ?? const <Map<String, dynamic>>[];
           if (docs.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Text(
-                  'No wanted posts yet.\nTap "New" to ask for an item.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            return const EmptyState(
+              icon: Icons.campaign_rounded,
+              title: 'No wanted posts yet',
+              subtitle: 'Tap "New" to ask for an item.',
             );
           }
           final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -140,17 +150,39 @@ class _WantedCard extends StatelessWidget {
     // action so we don't accidentally open the editor for someone else.
     final card = Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                UserAvatar(name: post.postedBy, radius: 22),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    post.title,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        post.title,
+                        style: AppTypography.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              post.postedBy,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodySmall,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const VerifiedBadge(size: 12),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
                 if (isMine)
@@ -169,10 +201,12 @@ class _WantedCard extends StatelessWidget {
                                 onPressed: () => Navigator.pop(ctx, false),
                                 child: const Text('Cancel'),
                               ),
-                              TextButton(
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.danger,
+                                ),
                                 onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text('Delete',
-                                    style: TextStyle(color: Colors.red)),
+                                child: const Text('Delete'),
                               ),
                             ],
                           ),
@@ -199,32 +233,34 @@ class _WantedCard extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             Text(
               post.description,
-              style: TextStyle(color: Colors.grey.shade800),
+              style: AppTypography.bodyMedium,
             ),
-            const SizedBox(height: 8),
-            Row(
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
               children: [
-                const Icon(Icons.person, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(post.postedBy, style: const TextStyle(fontSize: 12)),
-                const SizedBox(width: 12),
-                const Icon(Icons.school, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(post.department, style: const TextStyle(fontSize: 12)),
-                const SizedBox(width: 12),
-                const Icon(Icons.calendar_today,
-                    size: 14, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(
-                  '${post.postedAt.year}-${post.postedAt.month.toString().padLeft(2, '0')}-${post.postedAt.day.toString().padLeft(2, '0')}',
-                  style: const TextStyle(fontSize: 12),
+                InfoPill(
+                  icon: Icons.school_outlined,
+                  label: post.department.isEmpty ? '—' : post.department,
                 ),
+                InfoPill(
+                  icon: Icons.calendar_today_rounded,
+                  label:
+                      '${post.postedAt.year}-${post.postedAt.month.toString().padLeft(2, '0')}-${post.postedAt.day.toString().padLeft(2, '0')}',
+                ),
+                if (isMine)
+                  const StatusPill(
+                    label: 'Your post',
+                    tone: StatusTone.primary,
+                    icon: Icons.person_rounded,
+                  ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             // For our own posts, show an "Edit" button (also tappable
             // anywhere on the card). For other students' posts, show
             // "Contact Student" so they can open a chat with the post
@@ -237,9 +273,9 @@ class _WantedCard extends StatelessWidget {
                       icon: const Icon(Icons.edit_outlined),
                       label: const Text('Edit'),
                     )
-                  : ElevatedButton.icon(
+                  : FilledButton.icon(
                       onPressed: onContact,
-                      icon: const Icon(Icons.chat_bubble_outline),
+                      icon: const Icon(Icons.chat_bubble_outline_rounded),
                       label: const Text('Contact Student'),
                     ),
             ),
@@ -352,14 +388,20 @@ class _WantedEditorState extends State<_WantedEditor> {
             children: [
               TextFormField(
                 controller: _title,
-                decoration: const InputDecoration(labelText: 'Title'),
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  prefixIcon: Icon(Icons.title_rounded),
+                ),
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _desc,
-                decoration: const InputDecoration(labelText: 'Description'),
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  alignLabelWithHint: true,
+                ),
                 maxLines: 4,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
@@ -367,18 +409,18 @@ class _WantedEditorState extends State<_WantedEditor> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _dept,
-                decoration: const InputDecoration(labelText: 'Department'),
+                decoration: const InputDecoration(
+                  labelText: 'Department',
+                  prefixIcon: Icon(Icons.school_outlined),
+                ),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _busy ? null : _save,
-                child: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save'),
+              const SizedBox(height: 24),
+              BusyButton(
+                onPressed: _save,
+                busy: _busy,
+                label: widget.existing == null ? 'Post Request' : 'Save Changes',
+                icon: Icons.send_rounded,
+                expand: true,
               ),
             ],
           ),

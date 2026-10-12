@@ -40,7 +40,8 @@
       "Bash(firebase use:*)",
       "Bash(firebase firestore:indexes)",
       "Bash(firebase firestore:rules get)",
-      "Bash(firebase help:*)"
+      "Bash(firebase help:*)",
+      "Bash(wc -l lib/widgets/*.dart lib/screens/*.dart)"
     ]
   }
 }

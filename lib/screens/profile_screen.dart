@@ -4,6 +4,13 @@ import '../services/auth_service.dart';
 import '../services/user_service.dart';
 import '../services/transaction_service.dart';
 import '../models/item.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import '../widgets/busy_button.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/status_pill.dart';
+import '../widgets/user_avatar.dart';
 import 'my_listings_screen.dart';
 import 'wishlist_screen.dart';
 import 'admin_dashboard_screen.dart';
@@ -22,7 +29,11 @@ class ProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Center(child: Text('Not signed in.'));
+      return const EmptyState(
+        icon: Icons.lock_outline_rounded,
+        title: 'Not signed in',
+        subtitle: 'Please log in to view your profile.',
+      );
     }
     final userService = UserService();
     return StreamBuilder<Map<String, dynamic>?>(
@@ -47,55 +58,70 @@ class ProfileScreen extends StatelessWidget {
   ) {
     final body = ListView(
       children: [
+        // Hero header with brand gradient + bottom-rounded shape
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          color: Theme.of(context).colorScheme.primary,
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+          decoration: const BoxDecoration(
+            gradient: AppColors.brandGradient,
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(28),
+              bottomRight: Radius.circular(28),
+            ),
+          ),
           child: Column(
             children: [
-              CircleAvatar(
-                radius: 44,
-                backgroundColor: Colors.white,
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.10),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: UserAvatar(
+                  name: name,
+                  radius: 40,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               Text(
                 name.isEmpty ? 'Student' : name,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold),
+                style: AppTypography.headlineSmall.copyWith(
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
-                'Student ID: ${studentId.isEmpty ? '-' : studentId}',
-                style: const TextStyle(color: Colors.white70),
+                'Student ID: ${studentId.isEmpty ? '—' : studentId}',
+                style: AppTypography.bodySmall.copyWith(
+                  color: Colors.white70,
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(999),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.verified, color: Colors.green, size: 16),
+                    const Icon(Icons.verified_rounded,
+                        color: AppColors.success, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       'Verified Student',
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600),
+                      style: AppTypography.labelMedium.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -103,75 +129,116 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.school_outlined),
-                title: const Text('Department'),
-                subtitle: Text(dept.isEmpty ? '-' : dept),
-              ),
-              const Divider(height: 0),
-              ListTile(
-                leading: const Icon(Icons.email_outlined),
-                title: const Text('University Email'),
-                subtitle: Text(email),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.list_alt),
-                title: const Text('My Listings'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const MyListingsScreen()),
-                  );
-                },
-              ),
-              const Divider(height: 0),
-              ListTile(
-                leading: const Icon(Icons.swap_horiz),
-                title: const Text('My Transactions'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const _TransactionsScreen(),
+        const SizedBox(height: AppSpacing.lg),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                  );
-                },
-              ),
-              const Divider(height: 0),
-              ListTile(
-                leading: const Icon(Icons.favorite_border),
-                title: const Text('Wishlist'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const WishlistScreen()),
-                  );
-                },
-              ),
-              const Divider(height: 0),
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit Profile'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _openEditProfile(context, name, dept, studentId),
-              ),
-            ],
+                    child: const Icon(
+                      Icons.school_outlined,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  title: Text('Department', style: AppTypography.bodySmall),
+                  subtitle: Text(
+                    dept.isEmpty ? '—' : dept,
+                    style: AppTypography.titleSmall,
+                  ),
+                ),
+                const Divider(height: 0),
+                ListTile(
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.alternate_email_rounded,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  title: Text('University Email',
+                      style: AppTypography.bodySmall),
+                  subtitle: Text(
+                    email,
+                    style: AppTypography.titleSmall,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Card(
+            child: Column(
+              children: [
+                _navTile(
+                  context,
+                  icon: Icons.list_alt_rounded,
+                  title: 'My Listings',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const MyListingsScreen()),
+                    );
+                  },
+                ),
+                const Divider(height: 0),
+                _navTile(
+                  context,
+                  icon: Icons.swap_horiz_rounded,
+                  title: 'My Transactions',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const _TransactionsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 0),
+                _navTile(
+                  context,
+                  icon: Icons.favorite_border_rounded,
+                  title: 'Wishlist',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const WishlistScreen()),
+                    );
+                  },
+                ),
+                const Divider(height: 0),
+                _navTile(
+                  context,
+                  icon: Icons.edit_outlined,
+                  title: 'Edit Profile',
+                  onTap: () => _openEditProfile(context, name, dept, studentId),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
         // Admin dashboard link — only shown if the user has the admin
         // custom claim. We check this with a one-shot async call because
         // the StreamBuilder above only watches the profile doc.
@@ -179,24 +246,42 @@ class ProfileScreen extends StatelessWidget {
           future: AuthService().isCurrentUserAdmin(),
           builder: (context, snap) {
             if (snap.data != true) return const SizedBox.shrink();
-            return Card(
-              child: ListTile(
-                leading: const Icon(Icons.shield, color: Colors.red),
-                title: const Text('Admin Dashboard'),
-                subtitle: const Text('Manage listings, reports, users'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AdminDashboardScreen(),
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Card(
+                child: ListTile(
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerContainer,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                  );
-                },
+                    child: const Icon(
+                      Icons.shield_rounded,
+                      color: AppColors.danger,
+                    ),
+                  ),
+                  title: const Text('Admin Dashboard',
+                      style: AppTypography.titleSmall),
+                  subtitle: const Text(
+                    'Manage listings, reports, users',
+                    style: AppTypography.bodySmall,
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AdminDashboardScreen(),
+                      ),
+                    );
+                  },
+                ),
               ),
             );
           },
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.lg),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: OutlinedButton.icon(
@@ -206,17 +291,45 @@ class ProfileScreen extends StatelessWidget {
               // state.
               await AuthService().logout();
             },
-            icon: const Icon(Icons.logout, color: Colors.red),
-            label: const Text('Logout',
-                style: TextStyle(color: Colors.red)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.danger,
+              side: const BorderSide(color: AppColors.danger),
+            ),
+            icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
+            label: const Text('Logout'),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xxl),
       ],
     );
 
     if (embedded) return body;
     return Scaffold(appBar: AppBar(title: const Text('Profile')), body: body);
+  }
+
+  Widget _navTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: Theme.of(context)
+              .colorScheme
+              .primary
+              .withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: AppColors.textSecondary),
+      ),
+      title: Text(title, style: AppTypography.titleSmall),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
   }
 
   void _openEditProfile(BuildContext context, String currentName,
@@ -313,11 +426,11 @@ class _EditProfileScreenState extends State<_EditProfileScreen> {
               CustomTextField(
                 label: 'Full Name',
                 controller: _name,
-                prefixIcon: Icons.person_outline,
+                prefixIcon: Icons.person_outline_rounded,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               CustomTextField(
                 label: 'Department',
                 controller: _dept,
@@ -325,7 +438,7 @@ class _EditProfileScreenState extends State<_EditProfileScreen> {
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               CustomTextField(
                 label: 'Student ID',
                 controller: _studentId,
@@ -333,21 +446,40 @@ class _EditProfileScreenState extends State<_EditProfileScreen> {
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Required' : null,
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Note: Your email and admin status cannot be changed from the app.',
-                style: TextStyle(color: Colors.black54, fontSize: 12),
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.outlineSoft),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      color: AppColors.textSecondary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your email and admin status cannot be changed from the app.',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _busy ? null : _save,
-                child: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save'),
+              const SizedBox(height: AppSpacing.xl),
+              BusyButton(
+                onPressed: _save,
+                busy: _busy,
+                label: 'Save Changes',
+                icon: Icons.save_rounded,
+                expand: true,
               ),
             ],
           ),
@@ -368,7 +500,11 @@ class _TransactionsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('My Transactions')),
       body: uid.isEmpty
-          ? const Center(child: Text('Please log in.'))
+          ? const EmptyState(
+              icon: Icons.lock_outline_rounded,
+              title: 'Please log in',
+              subtitle: 'Sign in to view your transactions.',
+            )
           : StreamBuilder<List<Transaction>>(
               stream: service.streamMyTransactions(uid),
               builder: (context, snapshot) {
@@ -376,41 +512,63 @@ class _TransactionsScreen extends StatelessWidget {
                     !snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final items = snapshot.data ?? const <Transaction>[];
-                if (items.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text(
-                        'No transactions yet.\n'
-                        'Open a listing and tap "Buy" to start a deal.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                if (snapshot.hasError) {
+                  return ErrorState(
+                    message: 'Details: ${snapshot.error}',
+                    onRetry: () => (context as Element).markNeedsBuild(),
                   );
                 }
-                return ListView.builder(
+                final items = snapshot.data ?? const <Transaction>[];
+                if (items.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.receipt_long_rounded,
+                    title: 'No transactions yet',
+                    subtitle:
+                        'Open a listing and tap "Buy" to start a deal.',
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                   itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (_, i) {
                     final t = items[i];
                     return Card(
                       child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: _statusColor(t.status)
-                              .withOpacity(0.15),
+                        leading: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: _statusColor(t.status)
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          alignment: Alignment.center,
                           child: Icon(
-                            Icons.receipt_long,
+                            Icons.receipt_long_rounded,
                             color: _statusColor(t.status),
                           ),
                         ),
-                        title: Text(t.listingTitle,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(
-                          '${t.tradeType} • ${t.price <= 0 ? 'Free' : '৳${t.price.toStringAsFixed(0)}'}\n'
-                          '${t.buyerId == uid ? "You bought from ${t.sellerName}" : "You sold to ${t.buyerName}"}',
+                        title: Text(
+                          t.listingTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.titleSmall,
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            '${t.tradeType} • ${t.price <= 0 ? 'Free' : '৳${t.price.toStringAsFixed(0)}'}\n'
+                            '${t.buyerId == uid ? "You bought from ${t.sellerName}" : "You sold to ${t.buyerName}"}',
+                            style: AppTypography.bodySmall,
+                          ),
                         ),
                         isThreeLine: true,
-                        trailing: _statusChip(t.status),
+                        trailing: StatusPill(
+                          label: t.status,
+                          tone: _statusTone(t.status),
+                          fontSize: 10,
+                        ),
                         onTap: () => _openDetails(context, t),
                       ),
                     );
@@ -424,29 +582,27 @@ class _TransactionsScreen extends StatelessWidget {
   Color _statusColor(String status) {
     switch (status) {
       case 'Completed':
-        return Colors.green.shade700;
+        return AppColors.success;
       case 'Cancelled':
-        return Colors.red.shade700;
+        return AppColors.danger;
       case 'Confirmed':
-        return Colors.blue.shade700;
+        return AppColors.info;
       default:
-        return Colors.orange.shade700;
+        return AppColors.warning;
     }
   }
 
-  Widget _statusChip(String status) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: _statusColor(status).withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(status,
-          style: TextStyle(
-              color: _statusColor(status),
-              fontSize: 11,
-              fontWeight: FontWeight.w600)),
-    );
+  StatusTone _statusTone(String status) {
+    switch (status) {
+      case 'Completed':
+        return StatusTone.success;
+      case 'Cancelled':
+        return StatusTone.danger;
+      case 'Confirmed':
+        return StatusTone.info;
+      default:
+        return StatusTone.warning;
+    }
   }
 
   void _openDetails(BuildContext context, Transaction t) {

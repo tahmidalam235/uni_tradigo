@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import '../widgets/user_avatar.dart';
+import '../widgets/verified_badge.dart';
 import '../services/chat_service.dart';
 
 /// ChatScreen — real-time chat with another student.
@@ -159,19 +164,13 @@ class _ChatScreenState extends State<ChatScreen> {
         titleSpacing: 0,
         title: Row(
           children: [
-            CircleAvatar(
+            UserAvatar(
+              name: widget.peerName,
               radius: 18,
-              backgroundColor: Colors.white,
-              child: Text(
-                widget.peerName.isNotEmpty
-                    ? widget.peerName[0].toUpperCase()
-                    : '?',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold),
-              ),
+              color: Colors.white,
+              textColor: Theme.of(context).colorScheme.primary,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,21 +182,25 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: Text(
                           widget.peerName,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600),
+                          style: AppTypography.titleMedium.copyWith(
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Icon(Icons.verified,
-                          color: Colors.greenAccent, size: 14),
+                      const VerifiedBadge(
+                        size: 14,
+                        color: Colors.greenAccent,
+                      ),
                     ],
                   ),
                   if (widget.peerEmail.isNotEmpty)
                     Text(
                       widget.peerEmail,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 11, color: Colors.white70),
+                      style: AppTypography.bodySmall.copyWith(
+                        color: Colors.white70,
+                      ),
                     ),
                 ],
               ),
@@ -238,7 +241,14 @@ class _ChatScreenState extends State<ChatScreen> {
                       children: [
                         Expanded(
                           child: messages.isEmpty
-                              ? const Center(child: Text('Say hello!'))
+                              ? Center(
+                                  child: Text(
+                                    'Say hello!',
+                                    style: AppTypography.bodyMedium.copyWith(
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                                )
                               : ListView.builder(
                                   controller: _scroll,
                                   padding: const EdgeInsets.all(12),
@@ -256,8 +266,18 @@ class _ChatScreenState extends State<ChatScreen> {
                           top: false,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            color: Colors.white,
+                                horizontal: AppSpacing.sm,
+                                vertical: AppSpacing.sm),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              border: Border(
+                                top: BorderSide(
+                                  color: Theme.of(context)
+                                      .dividerColor
+                                      .withValues(alpha: 0.4),
+                                ),
+                              ),
+                            ),
                             child: Row(
                               children: [
                                 Expanded(
@@ -265,11 +285,27 @@ class _ChatScreenState extends State<ChatScreen> {
                                     controller: _ctrl,
                                     decoration: InputDecoration(
                                       hintText: 'Message',
-                                      fillColor: Colors.grey.shade100,
+                                      fillColor: AppColors.surfaceMuted,
+                                      filled: true,
                                       border: OutlineInputBorder(
                                         borderRadius:
                                             BorderRadius.circular(24),
                                         borderSide: BorderSide.none,
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(24),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(24),
+                                        borderSide: BorderSide(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          width: 1.4,
+                                        ),
                                       ),
                                       contentPadding:
                                           const EdgeInsets.symmetric(
@@ -291,7 +327,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                             color: Colors.white,
                                           ),
                                         )
-                                      : const Icon(Icons.send),
+                                      : const Icon(Icons.send_rounded),
                                 ),
                               ],
                             ),
@@ -313,27 +349,28 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final bubbleColor = isMe ? scheme.primary : AppColors.surfaceMuted;
+    final textColor = isMe ? Colors.white : AppColors.textPrimary;
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
-          color: isMe
-              ? Theme.of(context).colorScheme.primary
-              : Colors.grey.shade200,
+          color: bubbleColor,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(14),
-            topRight: const Radius.circular(14),
-            bottomLeft: Radius.circular(isMe ? 14 : 2),
-            bottomRight: Radius.circular(isMe ? 2 : 14),
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(isMe ? 16 : 4),
+            bottomRight: Radius.circular(isMe ? 4 : 16),
           ),
         ),
         child: Text(
           message.text,
-          style: TextStyle(color: isMe ? Colors.white : Colors.black87),
+          style: TextStyle(color: textColor, fontSize: 15, height: 1.3),
         ),
       ),
     );

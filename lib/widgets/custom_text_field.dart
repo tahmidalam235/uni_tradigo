@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-// CustomTextField — a small wrapper that gives every form the same look
-// without duplicating decoration code.
-
+/// CustomTextField — a small wrapper that gives every form the same
+/// look and behavior. The visual style is supplied by the active
+/// `ThemeData.inputDecorationTheme`, so this widget is intentionally
+/// thin and only exposes the fields forms actually need.
 class CustomTextField extends StatelessWidget {
   final String label;
   final String? hint;
@@ -11,7 +12,12 @@ class CustomTextField extends StatelessWidget {
   final bool obscureText;
   final int maxLines;
   final IconData? prefixIcon;
+  final Widget? suffixIcon;
   final String? Function(String?)? validator;
+  final void Function(String)? onChanged;
+  final bool enabled;
+  final TextInputAction? textInputAction;
+  final void Function(String)? onSubmitted;
 
   const CustomTextField({
     super.key,
@@ -22,7 +28,12 @@ class CustomTextField extends StatelessWidget {
     this.obscureText = false,
     this.maxLines = 1,
     this.prefixIcon,
+    this.suffixIcon,
     this.validator,
+    this.onChanged,
+    this.enabled = true,
+    this.textInputAction,
+    this.onSubmitted,
   });
 
   @override
@@ -33,10 +44,15 @@ class CustomTextField extends StatelessWidget {
       obscureText: obscureText,
       maxLines: maxLines,
       validator: validator,
+      onChanged: onChanged,
+      enabled: enabled,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onSubmitted,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+        suffixIcon: suffixIcon,
       ),
     );
   }

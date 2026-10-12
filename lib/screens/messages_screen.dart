@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/user_avatar.dart';
+import '../widgets/verified_badge.dart';
 import '../services/chat_service.dart';
 import 'chat_screen.dart';
 
@@ -15,11 +21,10 @@ class MessagesScreen extends StatelessWidget {
     final chat = ChatService();
 
     final body = uid.isEmpty
-        ? const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Text('Please log in to view your messages.'),
-            ),
+        ? const EmptyState(
+            icon: Icons.lock_outline_rounded,
+            title: 'Please log in',
+            subtitle: 'Sign in to view your messages.',
           )
         : StreamBuilder<List<ConversationSummary>>(
             stream: chat.streamMyConversations(uid),
@@ -28,39 +33,36 @@ class MessagesScreen extends StatelessWidget {
                   !snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final convos = snapshot.data ?? const <ConversationSummary>[];
-              if (convos.isEmpty) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text(
-                      'No messages yet.\nStart a conversation from a listing or wanted post.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+              if (snapshot.hasError) {
+                return ErrorState(
+                  message: 'Details: ${snapshot.error}',
+                  onRetry: () => (context as Element).markNeedsBuild(),
                 );
               }
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+              final convos = snapshot.data ?? const <ConversationSummary>[];
+              if (convos.isEmpty) {
+                return const EmptyState(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  title: 'No messages yet',
+                  subtitle:
+                      'Start a conversation from a listing or wanted post.',
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                 itemCount: convos.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
                   final c = convos[i];
                   return Card(
                     child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withOpacity(0.1),
-                        child: Text(
-                          c.otherUserName.isNotEmpty
-                              ? c.otherUserName[0].toUpperCase()
-                              : '?',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: 4,
+                      ),
+                      leading: UserAvatar(
+                        name: c.otherUserName,
+                        radius: 22,
                       ),
                       title: Row(
                         children: [
@@ -68,24 +70,33 @@ class MessagesScreen extends StatelessWidget {
                             child: Text(
                               c.otherUserName,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w600),
+                              style: AppTypography.titleSmall,
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(Icons.verified,
-                              color: Colors.green, size: 14),
+                          const VerifiedBadge(size: 12),
                         ],
                       ),
-                      subtitle: Text(
-                        c.lastMessage.isEmpty ? 'Say hello!' : c.lastMessage,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          c.lastMessage.isEmpty ? 'Say hello!' : c.lastMessage,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodySmall,
+                        ),
                       ),
-                      trailing: Text(
-                        _ago(c.lastTime),
-                        style:
-                            const TextStyle(fontSize: 11, color: Colors.grey),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _ago(c.lastTime),
+                            style: AppTypography.labelSmall.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
                       ),
                       onTap: () {
                         Navigator.of(context).push(
@@ -116,8 +127,8 @@ class MessagesScreen extends StatelessWidget {
   String _ago(DateTime t) {
     final d = DateTime.now().difference(t);
     if (d.inMinutes < 1) return 'now';
-    if (d.inMinutes < 60) return '${d.inMinutes} min ago';
-    if (d.inHours < 24) return '${d.inHours} h ago';
-    return '${d.inDays} d ago';
+    if (d.inMinutes < 60) return '${d.inMinutes}m';
+    if (d.inHours < 24) return '${d.inHours}h';
+    return '${d.inDays}d';
   }
 }

@@ -5,6 +5,10 @@ import '../data/dummy_data.dart';
 import '../models/item.dart';
 import '../widgets/item_card.dart';
 import '../widgets/category_chip.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/section_header.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 import 'item_details_screen.dart';
 import 'wishlist_screen.dart';
 import 'add_listing_screen.dart';
@@ -15,10 +19,9 @@ import '../services/listing_service.dart';
 import '../services/wishlist_service.dart';
 import '../services/user_service.dart';
 
-// HomeScreen — bottom-nav host with 5 tabs:
-//   Home (marketplace), Wishlist, Add (FAB-style), Messages, Profile.
-// Also includes a "Wanted Posts" entry in the AppBar.
-
+/// HomeScreen — bottom-nav host with 5 tabs:
+///   Home (marketplace), Wishlist, Add, Messages, Profile.
+/// Also exposes a "Wanted Posts" action in the AppBar.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -29,14 +32,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
 
-  // Pages indexed by the bottom nav.
   late final List<Widget> _pages = [
     const _MarketplaceTab(),
     const WishlistScreen(embedded: true),
     AddListingScreen(
       embedded: true,
-      // After a successful new listing post, switch the bottom-nav back
-      // to the marketplace tab so the new item is visible.
       onPosted: () {
         if (mounted) setState(() => _index = 0);
       },
@@ -48,17 +48,32 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Different title per tab.
       appBar: AppBar(
+        titleSpacing: 12,
         title: Row(
           children: [
-            Image.asset(
-              'assets/images/uni_tradigo_logo.png',
-              height: 32,
-              fit: BoxFit.contain,
+            Container(
+              height: 34,
+              width: 34,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: AppColors.softShadow,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.asset(
+                  'assets/images/uni_tradigo_logo.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
             const SizedBox(width: 10),
-            Text(_titles[_index]),
+            Text(
+              _titles[_index],
+              style: AppTypography.titleLarge,
+            ),
           ],
         ),
         actions: [
@@ -82,27 +97,27 @@ class _HomeScreenState extends State<HomeScreen> {
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            selectedIcon: Icon(Icons.home_rounded),
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.favorite_border),
-            selectedIcon: Icon(Icons.favorite),
+            icon: Icon(Icons.favorite_border_rounded),
+            selectedIcon: Icon(Icons.favorite_rounded),
             label: 'Wishlist',
           ),
           NavigationDestination(
-            icon: Icon(Icons.add_circle_outline),
-            selectedIcon: Icon(Icons.add_circle),
+            icon: Icon(Icons.add_box_outlined),
+            selectedIcon: Icon(Icons.add_box_rounded),
             label: 'Add',
           ),
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
             label: 'Messages',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
             label: 'Profile',
           ),
         ],
@@ -133,21 +148,18 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
   final _listingService = ListingService();
   final _wishlistService = WishlistService();
   final _userService = UserService();
-  String? _selectedCategory; // null = all
-  String _sort = 'Recent'; // Recent / PriceLow / PriceHigh
-  String _condition = ''; // empty = any
-  String _tradeType = ''; // empty = any
+  String? _selectedCategory;
+  String _sort = 'Recent';
+  String _condition = '';
+  String _tradeType = '';
 
   @override
   void initState() {
     super.initState();
-    // Set the current user id/name on the AppState so other screens
-    // (My Listings, Profile) can read them without re-querying Firebase.
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final appState = AppStateScope.of(context);
       appState.setCurrentUserId(user.uid);
-      // Best-effort: load the user's display name from their profile doc.
       _userService.getProfile(user.uid).then((profile) {
         if (profile != null) {
           appState.setCurrentUserName(
@@ -162,11 +174,6 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
     _searchCtrl.dispose();
     super.dispose();
   }
-
-  /// Returns the listings straight from Firestore.
-  /// Dummy data is no longer mixed in — only real user-created listings
-  /// are shown in the marketplace.
-  List<Item> _combined(List<Item> firestore) => firestore;
 
   List<Item> _filtered(List<Item> all) {
     final q = _searchCtrl.text.trim().toLowerCase();
@@ -192,7 +199,7 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
       case 'PriceHigh':
         list.sort((a, b) => b.price.compareTo(a.price));
         break;
-      default: // Recent
+      default:
         list.sort((a, b) => b.postedAt.compareTo(a.postedAt));
     }
     return list;
@@ -207,37 +214,24 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setSheet) {
           return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              8,
+              20,
+              24 + MediaQuery.of(ctx).viewInsets.bottom,
+            ),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Center(
-                    child: SizedBox(
-                      width: 40,
-                      height: 4,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.grey,
-                          borderRadius: BorderRadius.all(Radius.circular(2)),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Filters',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  const Text('Category'),
-                  const SizedBox(height: 6),
+                  const Text('Filters', style: AppTypography.titleLarge),
+                  const SizedBox(height: 16),
+                  _filterLabel('Category'),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -255,9 +249,9 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  const Text('Sort by'),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 16),
+                  _filterLabel('Sort by'),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     children: [
@@ -273,9 +267,9 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  const Text('Condition'),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 16),
+                  _filterLabel('Condition'),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     children: [
@@ -292,9 +286,9 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  const Text('Trade Type'),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 16),
+                  _filterLabel('Trade Type'),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     children: [
@@ -311,7 +305,7 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Row(
                     children: [
                       Expanded(
@@ -353,6 +347,15 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
     );
   }
 
+  Widget _filterLabel(String text) {
+    return Text(
+      text,
+      style: AppTypography.labelMedium.copyWith(
+        color: AppColors.textSecondary,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = AppStateScope.of(context);
@@ -360,56 +363,26 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
     return StreamBuilder<List<Item>>(
       stream: _listingService.streamAllListings(),
       builder: (context, snapshot) {
-        // 1) Error state: surface it with a friendly message.
         if (snapshot.hasError && !snapshot.hasData) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline,
-                      color: Colors.red, size: 48),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Could not load listings.',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Please check your internet connection.\n'
-                    'Details: ${snapshot.error}',
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.black54),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
+          return ErrorState(
+            message:
+                'Please check your internet connection.\nDetails: ${snapshot.error}',
+            onRetry: () => setState(() {}),
           );
         }
 
-        // 2) Loading: show a spinner on the very first build.
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        // 3) Loaded: use the Firestore data directly.
         final firestoreListings = snapshot.data ?? const <Item>[];
-        final combinedForState = _combined(firestoreListings);
 
-        // Keep AppState's internal _listings up-to-date so other
-        // screens that read from appState.listings (item details,
-        // wishlist) see the same data.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          appState.replaceListings(combinedForState);
+          appState.replaceListings(firestoreListings);
         });
 
-        // Stream the user's wishlist ids into AppState so the heart
-        // icons everywhere stay in sync with Firestore.
         if (user != null) {
           return StreamBuilder<Set<String>>(
             stream: _wishlistService.streamWishlistIds(user.uid),
@@ -418,25 +391,24 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                 if (!mounted) return;
                 appState.setWishlist(wishSnap.data ?? <String>{});
               });
-              return _buildContent(appState, combinedForState);
+              return _buildContent(appState, firestoreListings);
             },
           );
         }
 
-        return _buildContent(appState, combinedForState);
+        return _buildContent(appState, firestoreListings);
       },
     );
   }
 
-  Widget _buildContent(AppState appState, List<Item> combinedForState) {
+  Widget _buildContent(AppState appState, List<Item> items) {
     return AnimatedBuilder(
       animation: appState,
       builder: (_, __) {
-        final filtered = _filtered(combinedForState);
+        final filtered = _filtered(items);
         return ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.only(bottom: 100, top: 4),
           children: [
-            // Search bar.
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
               child: Row(
@@ -446,12 +418,12 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                       controller: _searchCtrl,
                       onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
-                        hintText: 'Search items...',
-                        prefixIcon: const Icon(Icons.search),
+                        hintText: 'Search items…',
+                        prefixIcon: const Icon(Icons.search_rounded),
                         suffixIcon: _searchCtrl.text.isEmpty
                             ? null
                             : IconButton(
-                                icon: const Icon(Icons.close),
+                                icon: const Icon(Icons.close_rounded),
                                 onPressed: () {
                                   _searchCtrl.clear();
                                   setState(() {});
@@ -463,12 +435,16 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                   const SizedBox(width: 8),
                   IconButton.filledTonal(
                     onPressed: _openFilters,
-                    icon: const Icon(Icons.tune),
+                    icon: const Icon(Icons.tune_rounded),
+                    style: IconButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            // Category strip.
             SizedBox(
               height: 44,
               child: ListView(
@@ -477,7 +453,7 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                 children: [
                   CategoryChip(
                     label: 'All',
-                    icon: Icons.apps,
+                    icon: Icons.apps_rounded,
                     selected: _selectedCategory == null,
                     onTap: () => setState(() => _selectedCategory = null),
                   ),
@@ -494,17 +470,10 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                 ],
               ),
             ),
-            // Featured header.
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(
-                'Featured Listings',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
+            const SectionHeader(title: 'Featured'),
             if (filtered.isNotEmpty)
               SizedBox(
-                height: 150,
+                height: 160,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -518,35 +487,36 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
                   },
                 ),
               ),
-            // Recent header.
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(
-                'Recent Listings',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
+            const SectionHeader(title: 'Recent listings'),
             if (filtered.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(40),
-                child: Center(
-                  child: Text(
-                    combinedForState.isEmpty
-                        ? 'No listings yet.\nBe the first to post one!'
-                        : 'No items match your search.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+              EmptyState(
+                icon: items.isEmpty
+                    ? Icons.shopping_bag_outlined
+                    : Icons.search_off_rounded,
+                title: items.isEmpty
+                    ? 'No listings yet'
+                    : 'No matches',
+                subtitle: items.isEmpty
+                    ? 'Be the first to post a listing for your campus.'
+                    : 'Try adjusting your search or filters.',
               )
             else
-              for (final item in filtered)
-                ItemCard(
-                  item: item,
-                  onTap: () => _openDetails(item),
-                  isWishlisted: appState.isWishlisted(item.id),
-                  onWishlistToggle: () => _toggleWishlist(item.id),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  children: [
+                    for (final item in filtered) ...[
+                      ItemCard(
+                        item: item,
+                        onTap: () => _openDetails(item),
+                        isWishlisted: appState.isWishlisted(item.id),
+                        onWishlistToggle: () => _toggleWishlist(item.id),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
                 ),
-            const SizedBox(height: 80),
+              ),
           ],
         );
       },
@@ -558,7 +528,6 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
     if (user == null) return;
     final appState = AppStateScope.of(context);
     final isWished = appState.isWishlisted(listingId);
-    // Optimistic UI update
     appState.toggleWishlistLocal(listingId);
     try {
       if (isWished) {
@@ -568,7 +537,6 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
       }
     } catch (e) {
       if (!mounted) return;
-      // Revert on failure
       appState.toggleWishlistLocal(listingId);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not update wishlist: $e')),
@@ -585,17 +553,17 @@ class _MarketplaceTabState extends State<_MarketplaceTab> {
   IconData _iconFor(String cat) {
     switch (cat) {
       case 'Books':
-        return Icons.menu_book;
+        return Icons.menu_book_rounded;
       case 'Electronics':
-        return Icons.devices;
+        return Icons.devices_rounded;
       case 'Calculator':
-        return Icons.calculate;
+        return Icons.calculate_rounded;
       case 'Accessories':
-        return Icons.lightbulb_outline;
+        return Icons.lightbulb_outline_rounded;
       case 'Furniture':
-        return Icons.chair;
+        return Icons.chair_rounded;
       default:
-        return Icons.shopping_bag;
+        return Icons.shopping_bag_rounded;
     }
   }
 }
@@ -608,25 +576,27 @@ class _FeaturedTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
-      width: 220,
+      width: 240,
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        gradient: LinearGradient(
-          colors: [scheme.primary, scheme.tertiary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        borderRadius: BorderRadius.circular(18),
+        gradient: AppColors.brandGradient,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(18),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -636,18 +606,26 @@ class _FeaturedTile extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         item.tradeType,
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 11),
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
-                    const Icon(Icons.verified, color: Colors.white, size: 18),
+                    const Icon(
+                      Icons.verified_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ],
                 ),
                 Column(
@@ -659,17 +637,19 @@ class _FeaturedTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         fontSize: 15,
+                        height: 1.25,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       item.priceLabel,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                        letterSpacing: -0.3,
                       ),
                     ),
                   ],

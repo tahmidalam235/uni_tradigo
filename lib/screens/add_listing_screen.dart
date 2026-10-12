@@ -6,7 +6,12 @@ import 'package:image_picker/image_picker.dart';
 import '../data/app_state.dart';
 import '../data/dummy_data.dart';
 import '../models/item.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import '../widgets/busy_button.dart';
 import '../widgets/custom_text_field.dart';
+import '../widgets/section_header.dart';
 import '../services/listing_service.dart';
 import '../services/storage_service.dart';
 import '../services/user_service.dart';
@@ -310,25 +315,25 @@ class _AddListingScreenState extends State<AddListingScreen> {
             CustomTextField(
               label: 'Item Title',
               controller: _title,
-              prefixIcon: Icons.title,
+              prefixIcon: Icons.title_rounded,
               validator: (v) =>
                   v == null || v.trim().isEmpty ? 'Required' : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             CustomTextField(
               label: 'Description',
               controller: _desc,
               maxLines: 3,
-              prefixIcon: Icons.notes,
+              prefixIcon: Icons.notes_rounded,
               validator: (v) =>
                   v == null || v.trim().isEmpty ? 'Required' : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             CustomTextField(
               label: 'Price (Taka) — 0 or empty for Donation',
               controller: _price,
               keyboardType: TextInputType.number,
-              prefixIcon: Icons.attach_money,
+              prefixIcon: Icons.payments_outlined,
               validator: (v) {
                 if (_tradeType == 'Donation') return null;
                 if (v == null || v.trim().isEmpty) return 'Required';
@@ -337,19 +342,22 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 return null;
               },
             ),
-            const SizedBox(height: 12),
-            _dropdown('Category', _category, DummyData.categories, (v) {
+            const SizedBox(height: AppSpacing.md),
+            _dropdown('Category', _category, Icons.category_outlined,
+                DummyData.categories, (v) {
               setState(() => _category = v!);
             }),
-            const SizedBox(height: 12),
-            _dropdown('Condition', _condition, DummyData.conditions, (v) {
+            const SizedBox(height: AppSpacing.md),
+            _dropdown('Condition', _condition, Icons.verified_outlined,
+                DummyData.conditions, (v) {
               setState(() => _condition = v!);
             }),
-            const SizedBox(height: 12),
-            _dropdown('Trade Type', _tradeType, DummyData.tradeTypes, (v) {
+            const SizedBox(height: AppSpacing.md),
+            _dropdown('Trade Type', _tradeType, Icons.swap_horiz_rounded,
+                DummyData.tradeTypes, (v) {
               setState(() => _tradeType = v!);
             }),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             CustomTextField(
               label: 'Campus Pickup Location',
               controller: _pickup,
@@ -357,31 +365,20 @@ class _AddListingScreenState extends State<AddListingScreen> {
               validator: (v) =>
                   v == null || v.trim().isEmpty ? 'Required' : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
 
             // ----- Image picker area -----
             _buildImagePicker(),
 
-            const SizedBox(height: 18),
-            ElevatedButton.icon(
+            const SizedBox(height: AppSpacing.xl),
+            BusyButton(
               onPressed: _busy ? null : _submit,
-              icon: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.send),
-              label: Text(
-                _busy
-                    ? 'Posting...'
-                    : (widget.editItem == null
-                        ? 'Post Listing'
-                        : 'Update Listing'),
-              ),
+              busy: _busy,
+              label: widget.editItem == null
+                  ? 'Post Listing'
+                  : 'Update Listing',
+              icon: Icons.send_rounded,
+              expand: true,
             ),
           ],
         ),
@@ -392,12 +389,8 @@ class _AddListingScreenState extends State<AddListingScreen> {
       return widget.editItem == null
           ? Column(
               children: [
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'Post a new listing',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+                const SectionHeader(
+                  title: 'Post a new listing',
                 ),
                 Expanded(child: body),
               ],
@@ -424,32 +417,33 @@ class _AddListingScreenState extends State<AddListingScreen> {
         children: [
           const Text(
             'Selected Image',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            style: AppTypography.titleSmall,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             child: Image.file(
               _selectedImage!,
               height: 180,
               fit: BoxFit.cover,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               TextButton.icon(
                 onPressed: _busy ? null : _pickImage,
-                icon: const Icon(Icons.swap_horiz),
+                icon: const Icon(Icons.swap_horiz_rounded),
                 label: const Text('Change'),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               TextButton.icon(
                 onPressed: _busy ? null : _removeImage,
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                icon: const Icon(Icons.delete_outline_rounded,
+                    color: AppColors.danger),
                 label: const Text(
                   'Remove',
-                  style: TextStyle(color: Colors.red),
+                  style: TextStyle(color: AppColors.danger),
                 ),
               ),
             ],
@@ -465,14 +459,14 @@ class _AddListingScreenState extends State<AddListingScreen> {
         children: [
           const Text(
             'Current Image',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            style: AppTypography.titleSmall,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             child: _buildExistingImage(),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           OutlinedButton.icon(
             onPressed: _busy ? null : _pickImage,
             icon: const Icon(Icons.add_photo_alternate_outlined),
@@ -483,10 +477,41 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
 
     // No image yet.
-    return OutlinedButton.icon(
-      onPressed: _busy ? null : _pickImage,
-      icon: const Icon(Icons.add_photo_alternate_outlined),
-      label: const Text('Add Image'),
+    return InkWell(
+      onTap: _busy ? null : _pickImage,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        height: 160,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppColors.outline,
+            style: BorderStyle.solid,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.add_photo_alternate_outlined,
+              size: 40,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Add a cover image',
+              style: AppTypography.bodyMedium,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Optional, but helps the listing stand out',
+              style: AppTypography.bodySmall,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -518,17 +543,20 @@ class _AddListingScreenState extends State<AddListingScreen> {
     return Container(
       height: 180,
       alignment: Alignment.center,
-      color: Colors.grey.shade200,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: const Icon(Icons.broken_image_outlined, size: 40),
     );
   }
 
-  Widget _dropdown(String label, String value, List<String> items,
-      ValueChanged<String?> onChanged) {
+  Widget _dropdown(String label, String value, IconData icon,
+      List<String> items, ValueChanged<String?> onChanged) {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: const Icon(Icons.list_alt),
+        prefixIcon: Icon(icon),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(

@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/item.dart';
+import '../theme/app_colors.dart';
+import 'info_pill.dart';
+import 'verified_badge.dart';
 
-// ItemCard — a reusable card for any listing on Home, Search, My Listings, etc.
-// Avoids duplicate card code on every screen.
-// Keeping it stateless and accepting an `onTap` so each screen can route it.
-
+/// ItemCard — a reusable card for any listing on Home, Search, My
+/// Listings, etc. Keeps the visual contract identical across screens.
 class ItemCard extends StatelessWidget {
   final Item item;
   final VoidCallback onTap;
@@ -24,13 +25,13 @@ class ItemCard extends StatelessWidget {
   Color _tradeColor(BuildContext context) {
     switch (item.tradeType) {
       case 'Sale':
-        return Colors.blue.shade700;
+        return AppColors.info;
       case 'Rent':
         return Colors.purple.shade700;
       case 'Exchange':
-        return Colors.orange.shade700;
+        return AppColors.warning;
       case 'Donation':
-        return Colors.green.shade700;
+        return AppColors.success;
       default:
         return Theme.of(context).colorScheme.primary;
     }
@@ -39,17 +40,17 @@ class ItemCard extends StatelessWidget {
   IconData _categoryIcon() {
     switch (item.category) {
       case 'Books':
-        return Icons.menu_book;
+        return Icons.menu_book_rounded;
       case 'Electronics':
-        return Icons.devices;
+        return Icons.devices_rounded;
       case 'Calculator':
-        return Icons.calculate;
+        return Icons.calculate_rounded;
       case 'Accessories':
         return Icons.lightbulb_outline;
       case 'Furniture':
-        return Icons.chair;
+        return Icons.chair_rounded;
       default:
-        return Icons.shopping_bag;
+        return Icons.shopping_bag_rounded;
     }
   }
 
@@ -76,10 +77,14 @@ class ItemCard extends StatelessWidget {
 
   Widget _errorIcon() {
     return Builder(builder: (context) {
-      return Icon(
-        _categoryIcon(),
-        size: 36,
-        color: Theme.of(context).colorScheme.primary,
+      return Container(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        alignment: Alignment.center,
+        child: Icon(
+          _categoryIcon(),
+          size: 36,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       );
     });
   }
@@ -87,7 +92,6 @@ class ItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -102,7 +106,7 @@ class ItemCard extends StatelessWidget {
                 height: 72,
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                  color: Theme.of(context).colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: item.imageUrl.isNotEmpty
@@ -124,44 +128,61 @@ class ItemCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         fontSize: 15,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       item.priceLabel,
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                         color: item.price <= 0
-                            ? Colors.green.shade700
-                            : Colors.black87,
+                            ? AppColors.success
+                            : AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
                       children: [
-                        _metaChip(item.condition, Colors.grey.shade700),
-                        _metaChip(item.tradeType, _tradeColor(context)),
-                        _metaChip(item.category, Colors.indigo),
+                        if (item.condition.isNotEmpty)
+                          InfoPill(
+                            icon: Icons.star_outline_rounded,
+                            label: item.condition,
+                            color: AppColors.textSecondary,
+                          ),
+                        if (item.tradeType.isNotEmpty)
+                          InfoPill(
+                            icon: Icons.swap_horiz_rounded,
+                            label: item.tradeType,
+                            color: _tradeColor(context),
+                          ),
+                        if (item.category.isNotEmpty)
+                          InfoPill(
+                            icon: _categoryIcon(),
+                            label: item.category,
+                            color: AppColors.info,
+                          ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.verified,
-                            size: 14, color: Colors.green),
+                        const VerifiedBadge(size: 14),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             item.sellerName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade700,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
@@ -176,31 +197,17 @@ class ItemCard extends StatelessWidget {
                       ? 'Remove from wishlist'
                       : 'Add to wishlist',
                   icon: Icon(
-                    isWishlisted ? Icons.favorite : Icons.favorite_border,
-                    color: isWishlisted ? Colors.red : Colors.grey,
+                    isWishlisted
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: isWishlisted
+                        ? AppColors.danger
+                        : AppColors.textMuted,
                   ),
                   onPressed: onWishlistToggle,
                 ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _metaChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );
