@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ (API 31) splash screen API.
+
+         Without this override the system renders the launch screen with a
+         default black background and a default app icon, which shows up as
+         a black flash before the Flutter splash appears.
+
+         `ic_splash_logo` is a dedicated splash icon containing ONLY the
+         "U" mark. The regular launcher icon (ic_launcher) carries the
+         full "U" + wordmark + tagline artwork, which the system scales up
+         to ~2/3 of the screen width and masks, cropping the wordmark.
+         The isolated mark reads cleanly at splash size. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_splash_logo</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/splash_background</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>

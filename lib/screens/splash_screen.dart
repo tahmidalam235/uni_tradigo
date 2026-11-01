@@ -158,16 +158,28 @@ class _SplashScreenState extends State<SplashScreen>
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       // Card container displaying Uni-Tradigo logo
+                                      //
+                                      // The logo asset has been trimmed to its
+                                      // exact artwork bounds (1035x954), so
+                                      // the image *is* the artwork with no
+                                      // dead white margin. The card sizes
+                                      // itself to the logo's real 1.085:1
+                                      // proportions and the image is given
+                                      // an explicit width with
+                                      // BoxFit.contain, which scales the
+                                      // whole logo down to fit rather than
+                                      // letting it overflow and get clipped
+                                      // by the card.
                                       Container(
-                                        constraints: const BoxConstraints(
-                                          maxWidth: 290,
-                                          maxHeight: 290,
+                                        width: 300,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 18,
+                                          vertical: 20,
                                         ),
-                                        padding: const EdgeInsets.all(20),
                                         decoration: BoxDecoration(
                                           color: Colors.white,
                                           borderRadius: BorderRadius.circular(
-                                            32,
+                                            28,
                                           ),
                                           border: Border.all(
                                             color: brandGreen.withValues(
@@ -195,7 +207,9 @@ class _SplashScreenState extends State<SplashScreen>
                                         ),
                                         child: Image.asset(
                                           'assets/images/uni_tradigo_logo.png',
+                                          width: 258,
                                           fit: BoxFit.contain,
+                                          alignment: Alignment.center,
                                         ),
                                       ),
                                       const SizedBox(height: 28),
@@ -229,13 +243,23 @@ class _SplashScreenState extends State<SplashScreen>
                                               color: brandGreen,
                                             ),
                                             const SizedBox(width: 6),
-                                            const Text(
-                                              'VERIFIED CAMPUS MARKETPLACE',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                                letterSpacing: 1.1,
-                                                color: brandGreenDark,
+                                            // Flexible + FittedBox so the badge
+                                            // scales down on narrow screens
+                                            // instead of overflowing the row.
+                                            Flexible(
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                alignment:
+                                                    Alignment.centerLeft,
+                                                child: const Text(
+                                                  'VERIFIED CAMPUS MARKETPLACE',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    letterSpacing: 1.1,
+                                                    color: brandGreenDark,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                           ],

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Deep forest green — matches the top of the Uni-Tradigo splash
+         gradient so the hand-off from the native splash screen to the
+         Flutter splash is seamless. -->
+    <color name="splash_background">#06331F</color>
+</resources>
