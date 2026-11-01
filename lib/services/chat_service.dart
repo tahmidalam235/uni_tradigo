@@ -12,6 +12,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///     - messages:  (subcollection)
 ///         conversations/{conversationId}/messages/{messageId}
 ///           - senderId, senderName, text, createdAt
+///           - imageUrl  (optional — Base64 data URL or http URL)
 ///
 /// Security is enforced by `firestore.rules`: only the two
 /// participants can read or write a conversation and its messages.
@@ -84,11 +85,18 @@ class ChatService {
   /// Sends a message in a conversation. Writes to the message
   /// subcollection and updates the parent conversation's last-*
   /// summary fields so list views can sort by recency.
+  ///
+  /// [imageUrl] is optional. When non-empty it is stored alongside the
+  /// text so the message renders as an image bubble. The Firestore
+  /// `messages` create rule only constrains `senderId` and the parent
+  /// conversation's participants, so adding this field requires no
+  /// security-rule change.
   Future<void> sendMessage({
     required String conversationId,
     required String senderId,
     required String senderName,
     required String text,
+    String imageUrl = '',
   }) async {
     final convoRef = _convoRef(conversationId);
     final msgRef = _messagesRef(conversationId).doc();
@@ -115,9 +123,18 @@ class ChatService {
       'text': text,
       'createdAt': FieldValue.serverTimestamp(),
     };
+    // Only write the imageUrl key when an image is attached, so existing
+    // text-only message documents keep exactly the same shape.
+    if (imageUrl.isNotEmpty) {
+      msg['imageUrl'] = imageUrl;
+    }
     await msgRef.set(msg);
     await convoRef.set({
-      'lastMessage': text,
+      // The conversation list preview shows a short label for image-only
+      // messages instead of an empty string.
+      'lastMessage': text.trim().isEmpty && imageUrl.isNotEmpty
+          ? '📷 Image'
+          : text,
       'lastSenderId': senderId,
       'lastUpdatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -170,6 +187,7 @@ class ChatService {
       senderName: (data['senderName'] ?? '').toString(),
       text: (data['text'] ?? '').toString(),
       time: time,
+      imageUrl: (data['imageUrl'] ?? '').toString(),
     );
   }
 }
@@ -200,11 +218,20 @@ class ChatMsg {
   final String text;
   final DateTime time;
 
+  /// Optional image attached to the message. Either a Base64 data URL
+  /// (`data:image/jpeg;base64,...`) or a plain http(s) URL. Empty when the
+  /// message is text-only.
+  final String imageUrl;
+
+  /// True when this message carries an image.
+  bool get hasImage => imageUrl.isNotEmpty;
+
   ChatMsg({
     required this.id,
     required this.senderId,
     required this.senderName,
     required this.text,
     required this.time,
+    this.imageUrl = '',
   });
 }
