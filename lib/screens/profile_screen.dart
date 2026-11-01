@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../services/user_service.dart';
 import '../services/transaction_service.dart';
 import '../models/item.dart';
@@ -287,6 +288,15 @@ class ProfileScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: OutlinedButton.icon(
             onPressed: () async {
+              // Remove this device's FCM token from the outgoing user's
+              // profile BEFORE signing out, so the next person to use the
+              // device doesn't receive this user's notifications. The
+              // Firestore rules only let a user update their own
+              // document, so this has to happen while still signed in.
+              final uid = FirebaseAuth.instance.currentUser?.uid;
+              if (uid != null) {
+                await NotificationService.instance.unregisterDeviceToken(uid);
+              }
               // The auth-state listener in MaterialApp will rebuild the
               // tree to LoginScreen as soon as signOut() flips the auth
               // state.

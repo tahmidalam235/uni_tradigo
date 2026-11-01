@@ -112,4 +112,60 @@ class UserService {
   Future<void> setSuspended(String uid, bool suspended) async {
     await _users.doc(uid).update({'suspended': suspended});
   }
+
+  // ----- FCM device tokens -------------------------------------------
+
+  /// Stores this device's FCM token on the user's profile so the
+  /// Cloud Function that sends pushes knows where to deliver them.
+  ///
+  /// The token list lives on `users/{uid}` as `fcmTokens` (a list of
+  /// strings) because the Firestore rules already allow the owner to
+  /// update their own document — no rules change is needed.
+  ///
+  /// Uses `arrayUnion` so two devices signed into the same account
+  /// don't overwrite each other's token, and a merge write so the
+  /// profile's other fields are never clobbered.
+  Future<void> saveFcmToken(String uid, String token) async {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) return;
+    await _users.doc(uid).set(
+      {
+        'fcmTokens': FieldValue.arrayUnion([trimmed]),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  /// Removes a single FCM token from the user's profile.
+  ///
+  /// Used when the device signs out (so the next person using the device
+  /// doesn't receive the previous user's pushes) and when FCM reports a
+  /// token as permanently invalid.
+  Future<void> removeFcmToken(String uid, String token) async {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) return;
+    final snap = await _users.doc(uid).get();
+    final existing = snap.get('fcmTokens');
+    if (existing is! List) return;
+    final remaining = existing
+        .map((t) => t.toString())
+        .where((t) => t != trimmed)
+        .toList(growable: false);
+    await _users.doc(uid).set(
+      {'fcmTokens': remaining},
+      SetOptions(merge: true),
+    );
+  }
+
+  /// Reads the FCM tokens registered for [uid]. Empty when the user has
+  /// no device registered (or the profile doesn't exist).
+  Future<List<String>> getFcmTokens(String uid) async {
+    final snap = await _users.doc(uid).get();
+    final tokens = snap.get('fcmTokens');
+    if (tokens is! List) return const [];
+    return tokens
+        .map((t) => t.toString())
+        .where((t) => t.isNotEmpty)
+        .toList(growable: false);
+  }
 }

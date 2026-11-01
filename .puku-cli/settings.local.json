@@ -63,7 +63,21 @@
       "Bash(ls -la android/app/src/main/res/mipmap-*/)",
       "Bash(adb install:*)",
       "Bash(ADB=\"C:/Users/Tahmid/AppData/Local/Android/Sdk/platform-tools/adb.exe\")",
-      "Bash($ADB install:*)"
+      "Bash($ADB install:*)",
+      "Bash(grep:*)",
+      "WebSearch",
+      "Bash(curl -s \"https://pub.dev/api/packages/firebase_messaging\")",
+      "Bash(timeout 90 firebase projects:list --json)",
+      "Bash(timeout 90 firebase functions:list --project uni-tradigo-f12fe)",
+      "Bash(timeout 90 firebase functions:list --project uni-tradigo-f12fe --debug)",
+      "Bash(timeout 90 firebase apis:list --project uni-tradigo-f12fe --json)",
+      "Bash(timeout 90 firebase apps:list --project uni-tradigo-f12fe --json)",
+      "Bash(timeout 60 firebase functions:list --project uni-tradigo-f12fe)",
+      "Bash(timeout 60 curl -s -X POST \"https://serviceusage.googleapis.com/v1/projects/uni-tradigo-f12fe/services/cloudfunctions.googleapis.com:enable\" -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(timeout 120 firebase functions:list --project uni-tradigo-f12fe --debug)",
+      "Bash(timeout 60 gcloud auth list)",
+      "Bash(npm --version)"
     ]
   }
 }

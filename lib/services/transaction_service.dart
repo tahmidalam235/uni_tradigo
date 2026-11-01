@@ -105,11 +105,26 @@ class TransactionService {
   /// Move a transaction to a new status. The rules allow updates only
   /// by participants and only into one of the allowed lifecycle
   /// statuses.
-  Future<void> updateStatus(String id, String newStatus) async {
-    await _txs.doc(id).set({
+  ///
+  /// [actedBy] optionally records the uid of the participant who made the
+  /// change. The Cloud Function uses it to tell a buyer-driven status
+  /// change (the buyer's own "Confirm Deal" tap) apart from a
+  /// seller-driven one (accept / reject / cancel / complete), so a buyer
+  /// is never notified about their own action. When omitted, no field is
+  /// written and the behaviour is identical to before.
+  Future<void> updateStatus(
+    String id,
+    String newStatus, {
+    String? actedBy,
+  }) async {
+    final payload = <String, dynamic>{
       'status': newStatus,
       'updatedAt': DateTime.now(),
-    }, SetOptions(merge: true));
+    };
+    if (actedBy != null && actedBy.isNotEmpty) {
+      payload['actedBy'] = actedBy;
+    }
+    await _txs.doc(id).set(payload, SetOptions(merge: true));
   }
 
   /// Helper used by review creation.

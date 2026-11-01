@@ -106,7 +106,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         );
         _txId = id;
       }
-      await _txService.updateStatus(_txId!, 'Confirmed');
+      await _txService.updateStatus(
+        _txId!,
+        'Confirmed',
+        actedBy: user.uid,
+      );
       if (!mounted) return;
       setState(() => _status = 'Confirmed');
       _showSuccess();
@@ -124,7 +128,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (_busy || _txId == null) return;
     setState(() => _busy = true);
     try {
-      await _txService.updateStatus(_txId!, 'Completed');
+      await _txService.updateStatus(
+        _txId!,
+        'Completed',
+        actedBy: FirebaseAuth.instance.currentUser?.uid,
+      );
       if (!mounted) return;
       setState(() => _status = 'Completed');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -144,7 +152,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (_busy || _txId == null) return;
     setState(() => _busy = true);
     try {
-      await _txService.updateStatus(_txId!, 'Cancelled');
+      await _txService.updateStatus(
+        _txId!,
+        'Cancelled',
+        actedBy: FirebaseAuth.instance.currentUser?.uid,
+      );
       if (!mounted) return;
       setState(() => _status = 'Cancelled');
     } catch (e) {

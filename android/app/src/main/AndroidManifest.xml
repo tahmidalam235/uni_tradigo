@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 13 (API 33) and above require an explicit runtime
+         permission to post notifications. The app asks for it at
+         startup via FirebaseMessaging.requestPermission(). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="Uni-Tradigo"
         android:name="${applicationName}"
@@ -30,6 +35,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- The channel Firebase posts the purchase and chat
+             notifications to when the app is in the background or
+             terminated. It is created in MainActivity.onCreate so the
+             channel always exists before the first notification arrives. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="uni_tradigo_notifications" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
