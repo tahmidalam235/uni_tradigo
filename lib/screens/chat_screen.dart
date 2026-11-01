@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/verified_badge.dart';
 import '../services/chat_service.dart';
@@ -420,7 +421,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
       ),
-      body: _initError != null
+      body: AppBackground(
+        child: _initError != null
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -599,6 +601,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     );
                   },
                 ),
+      ),
     );
   }
 }

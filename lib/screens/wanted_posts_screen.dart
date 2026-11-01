@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/busy_button.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/info_pill.dart';
@@ -31,56 +32,58 @@ class WantedPostsScreen extends StatelessWidget {
         icon: const Icon(Icons.add),
         label: const Text('New'),
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: service.streamAllRaw(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return ErrorState(
-              message: 'Details: ${snapshot.error}',
-              onRetry: () => (context as Element).markNeedsBuild(),
-            );
-          }
-          final docs = snapshot.data ?? const <Map<String, dynamic>>[];
-          if (docs.isEmpty) {
-            return const EmptyState(
-              icon: Icons.campaign_rounded,
-              title: 'No wanted posts yet',
-              subtitle: 'Tap "New" to ask for an item.',
-            );
-          }
-          final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: docs.length,
-            itemBuilder: (_, i) {
-              final d = docs[i];
-              final id = (d['id'] ?? '').toString();
-              final ownerUid = (d['postedById'] ?? '').toString();
-              final isMine = ownerUid == uid && ownerUid.isNotEmpty;
-              final post = WantedPost(
-                id: id,
-                title: (d['title'] ?? '').toString(),
-                description: (d['description'] ?? '').toString(),
-                postedBy: (d['postedBy'] ?? '').toString(),
-                department: (d['department'] ?? '').toString(),
-                postedAt: _toDt(d['createdAt']),
+      body: AppBackground(
+        child: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: service.streamAllRaw(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return ErrorState(
+                message: 'Details: ${snapshot.error}',
+                onRetry: () => (context as Element).markNeedsBuild(),
               );
-              final contactEmail = (d['contactEmail'] ?? '').toString();
-              return _WantedCard(
-                post: post,
-                ownerUid: ownerUid,
-                isMine: isMine,
-                onContact: () =>
-                    _contact(context, post, ownerUid, contactEmail),
-                onEdit: () => _openEditor(context, post),
+            }
+            final docs = snapshot.data ?? const <Map<String, dynamic>>[];
+            if (docs.isEmpty) {
+              return const EmptyState(
+                icon: Icons.campaign_rounded,
+                title: 'No wanted posts yet',
+                subtitle: 'Tap "New" to ask for an item.',
               );
-            },
-          );
-        },
+            }
+            final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: docs.length,
+              itemBuilder: (_, i) {
+                final d = docs[i];
+                final id = (d['id'] ?? '').toString();
+                final ownerUid = (d['postedById'] ?? '').toString();
+                final isMine = ownerUid == uid && ownerUid.isNotEmpty;
+                final post = WantedPost(
+                  id: id,
+                  title: (d['title'] ?? '').toString(),
+                  description: (d['description'] ?? '').toString(),
+                  postedBy: (d['postedBy'] ?? '').toString(),
+                  department: (d['department'] ?? '').toString(),
+                  postedAt: _toDt(d['createdAt']),
+                );
+                final contactEmail = (d['contactEmail'] ?? '').toString();
+                return _WantedCard(
+                  post: post,
+                  ownerUid: ownerUid,
+                  isMine: isMine,
+                  onContact: () =>
+                      _contact(context, post, ownerUid, contactEmail),
+                  onEdit: () => _openEditor(context, post),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -380,34 +383,35 @@ class _WantedEditorState extends State<_WantedEditor> {
             ? 'New Wanted Post'
             : 'Edit Wanted Post'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _title,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  prefixIcon: Icon(Icons.title_rounded),
+      body: AppBackground(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              children: [
+                TextFormField(
+                  controller: _title,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    prefixIcon: Icon(Icons.title_rounded),
+                  ),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _desc,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  alignLabelWithHint: true,
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _desc,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 4,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
-                maxLines: 4,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
+                const SizedBox(height: 12),
+                TextFormField(
                 controller: _dept,
                 decoration: const InputDecoration(
                   labelText: 'Department',
@@ -422,7 +426,8 @@ class _WantedEditorState extends State<_WantedEditor> {
                 icon: Icons.send_rounded,
                 expand: true,
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

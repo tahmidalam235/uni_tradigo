@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/verified_badge.dart';
@@ -117,10 +118,10 @@ class MessagesScreen extends StatelessWidget {
             },
           );
 
-    if (embedded) return body;
+    if (embedded) return AppBackground(child: body);
     return Scaffold(
       appBar: AppBar(title: const Text('Messages')),
-      body: body,
+      body: AppBackground(child: body),
     );
   }
 

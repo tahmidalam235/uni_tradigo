@@ -5,6 +5,7 @@ import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/busy_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/section_header.dart';
@@ -138,94 +139,96 @@ class _ReviewScreenState extends State<ReviewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Rate & Review')),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        children: [
-          // Seller card header
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Row(
-                children: [
-                  UserAvatar(name: widget.item.sellerName, radius: 24),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.item.sellerName.isEmpty
-                              ? 'Seller'
-                              : widget.item.sellerName,
-                          style: AppTypography.titleMedium,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.bodySmall,
-                        ),
-                      ],
+      body: AppBackground(
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          children: [
+            // Seller card header
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  children: [
+                    UserAvatar(name: widget.item.sellerName, radius: 24),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.item.sellerName.isEmpty
+                                ? 'Seller'
+                                : widget.item.sellerName,
+                            style: AppTypography.titleMedium,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodySmall,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SectionHeader(
-            title: 'How would you rate this deal?',
-            padding: EdgeInsets.fromLTRB(0, 24, 0, 12),
-          ),
-          // Stars row
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceMuted,
-              borderRadius: BorderRadius.circular(16),
+            const SectionHeader(
+              title: 'How would you rate this deal?',
+              padding: EdgeInsets.fromLTRB(0, 24, 0, 12),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(5, (i) {
-                final filled = i < _rating;
-                return IconButton(
-                  iconSize: 40,
-                  onPressed: () => setState(() => _rating = i + 1),
-                  icon: Icon(
-                    filled ? Icons.star_rounded : Icons.star_border_rounded,
-                    color: AppColors.warning,
-                  ),
-                );
-              }),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          const Padding(
-            padding: EdgeInsets.only(bottom: AppSpacing.sm),
-            child: Text(
-              'Reviews are public and cannot be edited after submission.',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
+            // Stars row
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  final filled = i < _rating;
+                  return IconButton(
+                    iconSize: 40,
+                    onPressed: () => setState(() => _rating = i + 1),
+                    icon: Icon(
+                      filled ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: AppColors.warning,
+                    ),
+                  );
+                }),
               ),
             ),
-          ),
-          CustomTextField(
-            label: 'Write your feedback...',
-            controller: _feedback,
-            maxLines: 4,
-            validator: (v) =>
-                v == null || v.trim().isEmpty ? 'Required' : null,
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          BusyButton(
-            onPressed: _submit,
-            busy: _busy,
-            label: 'Submit Review',
-            icon: Icons.send_rounded,
-            expand: true,
-          ),
-        ],
+            const SizedBox(height: AppSpacing.lg),
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Text(
+                'Reviews are public and cannot be edited after submission.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            CustomTextField(
+              label: 'Write your feedback...',
+              controller: _feedback,
+              maxLines: 4,
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            BusyButton(
+              onPressed: _submit,
+              busy: _busy,
+              label: 'Submit Review',
+              icon: Icons.send_rounded,
+              expand: true,
+            ),
+          ],
+        ),
       ),
     );
   }

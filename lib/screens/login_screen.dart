@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'register_screen.dart';
+import '../widgets/app_background.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/busy_button.dart';
 import '../theme/app_colors.dart';
@@ -79,7 +80,8 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.surfaceGradient),
-        child: SafeArea(
+        child: AppBackground(
+          child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Form(
@@ -203,6 +205,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

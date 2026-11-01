@@ -7,6 +7,7 @@ import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/info_pill.dart';
 import '../widgets/review_list_item.dart';
@@ -84,7 +85,9 @@ class ItemDetailsScreen extends StatelessWidget {
         if (item == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('Item')),
-            body: const Center(child: Text('Item not found.')),
+            body: const AppBackground(
+              child: Center(child: Text('Item not found.')),
+            ),
           );
         }
         final isWished = appState.isWishlisted(item.id);
@@ -114,7 +117,8 @@ class ItemDetailsScreen extends StatelessWidget {
                 ),
             ],
           ),
-          body: ListView(
+          body: AppBackground(
+            child: ListView(
             children: [
               // Hero image area — shows the Firestore image if available,
               // otherwise falls back to a category-icon placeholder.
@@ -255,6 +259,7 @@ class ItemDetailsScreen extends StatelessWidget {
                 ),
               ),
             ],
+            ),
           ),
           bottomNavigationBar: SafeArea(
             child: Container(

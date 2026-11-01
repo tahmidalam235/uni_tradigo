@@ -41,7 +41,15 @@
       "Bash(firebase firestore:indexes)",
       "Bash(firebase firestore:rules get)",
       "Bash(firebase help:*)",
-      "Bash(wc -l lib/widgets/*.dart lib/screens/*.dart)"
+      "Bash(wc -l lib/widgets/*.dart lib/screens/*.dart)",
+      "Bash(done)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/Tahmid/StudioProjects/uni_tradigo/lib/screens/**)",
+      "Bash(do if:*)",
+      "Bash(then echo:*)",
+      "Read(//c/Users/Tahmid/StudioProjects/uni_tradigo/**)",
+      "Bash(fi)"
     ]
   }
 }

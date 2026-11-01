@@ -4,6 +4,7 @@ import '../data/app_state.dart';
 import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/status_pill.dart';
 import '../services/listing_service.dart';
@@ -29,55 +30,57 @@ class MyListingsScreen extends StatelessWidget {
         icon: const Icon(Icons.add_rounded),
         label: const Text('New listing'),
       ),
-      body: user == null
-          ? const EmptyState(
-              icon: Icons.lock_outline_rounded,
-              title: 'Please log in',
-              subtitle: 'You must be logged in to view your listings.',
-            )
-          : StreamBuilder<List<Item>>(
-              stream: listingService.streamMyListings(user.uid),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    !snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return ErrorState(
-                    message:
-                        'If you just added a Firestore index, wait a minute and try again.\nDetails: ${snapshot.error}',
-                    onRetry: () => Navigator.of(context).pop(),
-                  );
-                }
-                final items = snapshot.data ?? const <Item>[];
-                if (items.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.post_add_rounded,
-                    title: 'No listings yet',
-                    subtitle:
-                        'Tap "New listing" to post your first item for the campus.',
-                  );
-                }
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    await Future<void>.delayed(
-                        const Duration(milliseconds: 300));
-                  },
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, i) {
-                      final item = items[i];
-                      return _MyListingCard(
-                        item: item,
-                        listingService: listingService,
-                      );
+      body: AppBackground(
+        child: user == null
+            ? const EmptyState(
+                icon: Icons.lock_outline_rounded,
+                title: 'Please log in',
+                subtitle: 'You must be logged in to view your listings.',
+              )
+            : StreamBuilder<List<Item>>(
+                stream: listingService.streamMyListings(user.uid),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return ErrorState(
+                      message:
+                          'If you just added a Firestore index, wait a minute and try again.\nDetails: ${snapshot.error}',
+                      onRetry: () => Navigator.of(context).pop(),
+                    );
+                  }
+                  final items = snapshot.data ?? const <Item>[];
+                  if (items.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.post_add_rounded,
+                      title: 'No listings yet',
+                      subtitle:
+                          'Tap "New listing" to post your first item for the campus.',
+                    );
+                  }
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      await Future<void>.delayed(
+                          const Duration(milliseconds: 300));
                     },
-                  ),
-                );
-              },
-            ),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final item = items[i];
+                        return _MyListingCard(
+                          item: item,
+                          listingService: listingService,
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+      ),
     );
   }
 }

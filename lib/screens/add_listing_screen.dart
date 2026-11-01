@@ -9,6 +9,7 @@ import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/busy_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/section_header.dart';
@@ -392,10 +393,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 const SectionHeader(
                   title: 'Post a new listing',
                 ),
-                Expanded(child: body),
+                Expanded(child: AppBackground(child: body)),
               ],
             )
-          : body;
+          : AppBackground(child: body);
     }
 
     return Scaffold(
@@ -403,7 +404,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
         title: Text(
             widget.editItem == null ? 'Add Listing' : 'Edit Listing'),
       ),
-      body: body,
+      body: AppBackground(child: body),
     );
   }
 

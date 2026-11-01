@@ -4,6 +4,7 @@ import '../data/app_state.dart';
 import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/info_pill.dart';
 import '../widgets/verified_badge.dart';
@@ -147,10 +148,10 @@ class _WishlistScreenState extends State<WishlistScreen> {
       },
     );
 
-    if (widget.embedded) return body;
+    if (widget.embedded) return AppBackground(child: body);
     return Scaffold(
       appBar: AppBar(title: const Text('Wishlist')),
-      body: body,
+      body: AppBackground(child: body),
     );
   }
 

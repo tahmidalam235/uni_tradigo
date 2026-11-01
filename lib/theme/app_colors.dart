@@ -49,10 +49,10 @@ class AppColors {
   );
 
   static const LinearGradient splashGradient = LinearGradient(
-    colors: [Color(0xFF1B5E96), Color(0xFF2E7D32), Color(0xFF26A69A)],
-    stops: [0.0, 0.6, 1.0],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
+    colors: [Color(0xFFFFFFFF), Color(0xFFF3F9F5), Color(0xFFE5F3EC)],
+    stops: [0.0, 0.5, 1.0],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
   );
 
   static const LinearGradient surfaceGradient = LinearGradient(
@@ -69,18 +69,18 @@ class AppColors {
 
   // Shadows
   static List<BoxShadow> get cardShadow => [
-        BoxShadow(
-          color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-          blurRadius: 16,
-          offset: const Offset(0, 4),
-        ),
-      ];
+    BoxShadow(
+      color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+      blurRadius: 16,
+      offset: const Offset(0, 4),
+    ),
+  ];
 
   static List<BoxShadow> get softShadow => [
-        BoxShadow(
-          color: const Color(0xFF0F172A).withValues(alpha: 0.06),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
-        ),
-      ];
+    BoxShadow(
+      color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+      blurRadius: 8,
+      offset: const Offset(0, 2),
+    ),
+  ];
 }

@@ -8,6 +8,7 @@ import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/section_header.dart';
 import '../widgets/status_pill.dart';
@@ -54,17 +55,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget build(BuildContext context) {
     if (!_checked) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: AppBackground(
+          child: Center(child: CircularProgressIndicator()),
+        ),
       );
     }
     if (!_isAdmin) {
       return Scaffold(
         appBar: AppBar(title: const Text('Admin Dashboard')),
-        body: const EmptyState(
-          icon: Icons.lock_outline_rounded,
-          title: 'No access',
-          subtitle: 'You do not have permission to view this page.',
-          accent: AppColors.danger,
+        body: const AppBackground(
+          child: EmptyState(
+            icon: Icons.lock_outline_rounded,
+            title: 'No access',
+            subtitle: 'You do not have permission to view this page.',
+            accent: AppColors.danger,
+          ),
         ),
       );
     }
@@ -74,7 +79,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildAdmin(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Admin Dashboard')),
-      body: ListView(
+      body: AppBackground(
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
         children: [
           // Live stats from Firestore.
@@ -245,6 +251,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

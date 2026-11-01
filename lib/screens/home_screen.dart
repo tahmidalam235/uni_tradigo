@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../data/app_state.dart';
 import '../data/dummy_data.dart';
 import '../models/item.dart';
+import '../widgets/app_background.dart';
 import '../widgets/item_card.dart';
 import '../widgets/category_chip.dart';
 import '../widgets/empty_state.dart';
@@ -90,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: _pages[_index],
+      body: AppBackground(child: _pages[_index]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),

@@ -5,6 +5,7 @@ import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/busy_button.dart';
 import '../widgets/section_header.dart';
 import '../widgets/status_pill.dart';
@@ -211,7 +212,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final isBuyer = user != null && user.uid != widget.item.sellerId;
     return Scaffold(
       appBar: AppBar(title: const Text('Confirm Deal')),
-      body: ListView(
+      body: AppBackground(
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           Card(
@@ -350,6 +352,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
             ),
           ],
         ],
+        ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_background.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/busy_button.dart';
 import '../theme/app_colors.dart';
@@ -93,7 +94,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Create Account')),
-      body: SafeArea(
+      body: AppBackground(
+        child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Form(
@@ -203,6 +205,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/app_background.dart';
 import '../widgets/busy_button.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/status_pill.dart';
@@ -303,8 +304,11 @@ class ProfileScreen extends StatelessWidget {
       ],
     );
 
-    if (embedded) return body;
-    return Scaffold(appBar: AppBar(title: const Text('Profile')), body: body);
+    if (embedded) return AppBackground(child: body);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: AppBackground(child: body),
+    );
   }
 
   Widget _navTile(
@@ -417,7 +421,8 @@ class _EditProfileScreenState extends State<_EditProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Edit Profile')),
-      body: Padding(
+      body: AppBackground(
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
@@ -485,6 +490,7 @@ class _EditProfileScreenState extends State<_EditProfileScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -499,7 +505,8 @@ class _TransactionsScreen extends StatelessWidget {
     final service = TransactionService();
     return Scaffold(
       appBar: AppBar(title: const Text('My Transactions')),
-      body: uid.isEmpty
+      body: AppBackground(
+        child: uid.isEmpty
           ? const EmptyState(
               icon: Icons.lock_outline_rounded,
               title: 'Please log in',
@@ -576,6 +583,7 @@ class _TransactionsScreen extends StatelessWidget {
                 );
               },
             ),
+      ),
     );
   }
 
