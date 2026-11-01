@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../widgets/busy_button.dart';
+import '../widgets/custom_text_field.dart';
 import '../widgets/section_header.dart';
 import '../widgets/user_avatar.dart';
 import '../services/review_service.dart';
@@ -114,8 +115,19 @@ class _ReviewScreenState extends State<ReviewScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      // The service throws a StateError when the same reviewer tries to
+      // submit a second review for the same transaction. Surface a
+      // user-friendly message instead of the raw "Bad state" text.
+      final raw = e.toString();
+      final isDuplicate = raw.contains('already reviewed');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not submit: $e')),
+        SnackBar(
+          content: Text(
+            isDuplicate
+                ? 'You have already reviewed this transaction.'
+                : 'Could not submit: $raw',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -188,16 +200,22 @@ class _ReviewScreenState extends State<ReviewScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          TextField(
-            controller: _feedback,
-            maxLines: 4,
-            decoration: InputDecoration(
-              labelText: 'Write your feedback...',
-              alignLabelWithHint: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
+          const Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.sm),
+            child: Text(
+              'Reviews are public and cannot be edited after submission.',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
               ),
             ),
+          ),
+          CustomTextField(
+            label: 'Write your feedback...',
+            controller: _feedback,
+            maxLines: 4,
+            validator: (v) =>
+                v == null || v.trim().isEmpty ? 'Required' : null,
           ),
           const SizedBox(height: AppSpacing.xl),
           BusyButton(

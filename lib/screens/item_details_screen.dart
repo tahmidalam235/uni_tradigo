@@ -7,13 +7,17 @@ import '../models/item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/info_pill.dart';
+import '../widgets/review_list_item.dart';
 import '../widgets/section_header.dart';
+import '../widgets/seller_rating_summary.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/verified_badge.dart';
 import '../services/listing_service.dart';
 import '../services/report_service.dart';
+import '../services/review_service.dart';
 import '../services/wishlist_service.dart';
 import 'chat_screen.dart';
 import 'transaction_screen.dart';
@@ -244,6 +248,8 @@ class ItemDetailsScreen extends StatelessWidget {
                       icon: Icons.schedule_rounded,
                       label: 'Posted ${_formatTime(item.postedAt)}',
                     ),
+                    const Divider(height: AppSpacing.xxl),
+                    _SellerReviewsSection(sellerId: item.sellerId),
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -544,5 +550,155 @@ class ItemDetailsScreen extends StatelessWidget {
   String _formatTime(DateTime t) {
     return '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} '
         '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+/// _SellerReviewsSection — a stateful widget that renders the
+/// "Seller Rating & Reviews" block on the item details page.
+///
+/// Data source: [ReviewService.streamForUser] keyed by the seller's
+/// Firebase Auth UID. The aggregate (count / average / distribution)
+/// is computed locally from the streamed list so the UI updates the
+/// instant a new review is submitted.
+class _SellerReviewsSection extends StatefulWidget {
+  /// Firebase Auth UID of the seller whose reviews are displayed.
+  final String sellerId;
+
+  const _SellerReviewsSection({required this.sellerId});
+
+  @override
+  State<_SellerReviewsSection> createState() => _SellerReviewsSectionState();
+}
+
+class _SellerReviewsSectionState extends State<_SellerReviewsSection> {
+  static const int _initialVisible = 3;
+  // Keyed by sellerId so the "show all" state resets when navigating to
+  // a different listing (e.g. from search).
+  final Map<String, bool> _showAllBySeller = <String, bool>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final sellerId = widget.sellerId;
+
+    // If the listing has no seller id (shouldn't happen for real listings
+    // but might for legacy / dummy data) just skip the section entirely
+    // so the screen doesn't show a broken "0 reviews" panel.
+    if (sellerId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final service = ReviewService();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(title: 'Seller Rating & Reviews'),
+        const SizedBox(height: AppSpacing.sm),
+        StreamBuilder<List<Review>>(
+          stream: service.streamForUser(sellerId),
+          builder: (context, snapshot) {
+            // First-time loading (no data yet AND waiting).
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return SellerRatingSummary(
+                average: 0,
+                reviewCount: 0,
+                distribution: const {},
+                loading: true,
+              );
+            }
+            if (snapshot.hasError) {
+              return ErrorState(
+                message: 'Details: ${snapshot.error}',
+                onRetry: () =>
+                    (context as Element).markNeedsBuild(),
+              );
+            }
+            final reviews = snapshot.data ?? const <Review>[];
+            final summary =
+                ReviewService.aggregate(reviews);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SellerRatingSummary(
+                  average: summary.average,
+                  reviewCount: summary.count,
+                  distribution: summary.distribution,
+                ),
+                if (summary.count == 0) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  const EmptyState(
+                    icon: Icons.rate_review_outlined,
+                    title: 'No reviews yet',
+                    subtitle:
+                        'Be the first to review this seller after a deal.',
+                    accent: AppColors.textSecondary,
+                  ),
+                ] else ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  _ReviewsList(
+                    reviews: reviews,
+                    initialVisible: _initialVisible,
+                    showAll: _showAllBySeller[sellerId] ?? false,
+                    onShowAllToggle: () => setState(() {
+                      _showAllBySeller[sellerId] = !(_showAllBySeller[sellerId] ?? false);
+                    }),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _ReviewsList extends StatelessWidget {
+  final List<Review> reviews;
+  final int initialVisible;
+  final bool showAll;
+  final VoidCallback onShowAllToggle;
+
+  const _ReviewsList({
+    required this.reviews,
+    required this.initialVisible,
+    required this.showAll,
+    required this.onShowAllToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // When the user taps "Show all" we always render the full list. The
+    // visible list shows the most recent [initialVisible] reviews; this
+    // matches the order they already see in the summary (newest first).
+    final visible = showAll || reviews.length <= initialVisible
+        ? reviews
+        : reviews.take(initialVisible).toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final r in visible) ...[
+          ReviewListItem(review: r),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+        if (reviews.length > initialVisible)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: onShowAllToggle,
+              icon: Icon(
+                showAll
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+              ),
+              label: Text(
+                showAll
+                    ? 'Show less'
+                    : 'Show all ${reviews.length} reviews',
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

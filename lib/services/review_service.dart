@@ -87,6 +87,41 @@ class ReviewService {
     return total / snap.docs.length;
   }
 
+  /// Synchronously computes a rating summary from an in-memory list of
+  /// reviews. Returns:
+  ///   - [count]: number of reviews with rating 1..5 (others are ignored)
+  ///   - [average]: one-decimal rounded mean; 0 when there are no reviews
+  ///   - [distribution]: a map keyed by rating 1..5 with the number of
+  ///     reviews at that star level. Always contains every key in 1..5
+  ///     (missing buckets are 0) so callers can render the bars without
+  ///     null checks.
+  ///
+  /// Pure function over the supplied list — no extra Firestore round-trip.
+  /// The screen that calls [streamForUser] already has the documents; we
+  /// just aggregate them locally so the average updates the instant a
+  /// new review lands.
+  static ({int count, double average, Map<int, int> distribution}) aggregate(
+    List<Review> reviews,
+  ) {
+    final distribution = <int, int>{for (final r in [1, 2, 3, 4, 5]) r: 0};
+    int total = 0;
+    int count = 0;
+    for (final r in reviews) {
+      final rating = r.rating;
+      if (rating < 1 || rating > 5) continue;
+      distribution[rating] = (distribution[rating] ?? 0) + 1;
+      total += rating;
+      count++;
+    }
+    if (count == 0) {
+      return (count: 0, average: 0, distribution: distribution);
+    }
+    final raw = total / count;
+    // Round to one decimal place so the UI never shows 4.6666666667.
+    final rounded = (raw * 10).round() / 10.0;
+    return (count: count, average: rounded, distribution: distribution);
+  }
+
   Review _toReview(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const {};
     final created = data['createdAt'];

@@ -183,4 +183,13 @@ class Review {
     required this.feedback,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
+
+  /// First non-space character of [reviewerName] uppercased, or "?" when
+  /// the name is empty. Pure UI helper used by the avatar in the review
+  /// list — never written to Firestore.
+  String get initials {
+    final trimmed = reviewerName.trim();
+    if (trimmed.isEmpty) return '?';
+    return trimmed[0].toUpperCase();
+  }
 }
