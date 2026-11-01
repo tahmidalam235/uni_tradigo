@@ -7,6 +7,7 @@ import '../theme/app_typography.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/verified_badge.dart';
 import '../services/chat_service.dart';
+import '../services/user_service.dart';
 
 /// ChatScreen — real-time chat with another student.
 ///
@@ -46,10 +47,24 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _ctrl = TextEditingController();
   final ScrollController _scroll = ScrollController();
   final _chat = ChatService();
+  final _userService = UserService();
 
   bool _sending = false;
   String? _conversationId;
   String? _initError;
+
+  /// Peer display name resolved from the Firebase user profile
+  /// (`users/{peerUid}`). The widget's `peerName` is used as the initial
+  /// value so the header renders instantly, then refined from Firestore
+  /// when the profile loads (the Messages list passes an empty email and
+  /// sometimes a stale/blank name).
+  String _peerName = '';
+
+  /// Peer email resolved from the same profile document.
+  String _peerEmail = '';
+
+  /// Peer department (e.g. "CSE"), shown under the name when known.
+  String _peerDepartment = '';
 
   @override
   void initState() {
@@ -62,13 +77,44 @@ class _ChatScreenState extends State<ChatScreen> {
         (myUid.isNotEmpty && widget.peerUid.isNotEmpty
             ? _chat.conversationIdFor(myUid, widget.peerUid)
             : null);
+    // Start from the caller-supplied values so the header is never blank
+    // while the profile read is in flight.
+    _peerName = widget.peerName.trim();
+    _peerEmail = widget.peerEmail.trim();
     // Kick off the idempotent conversation initialization in the
     // background. The screen renders immediately; messages will stream
     // in once the conversation exists.
     if (_conversationId != null && myUid.isNotEmpty) {
       _ensureConversation();
+      _loadPeerProfile();
     } else {
       _initError = 'Cannot open chat: missing user or peer id.';
+    }
+  }
+
+  /// Reads the peer's profile document (`users/{peerUid}`) so the header
+  /// shows the real display name and contact details. Purely a display
+  /// lookup — it does not touch the conversation or message logic.
+  Future<void> _loadPeerProfile() async {
+    final peerUid = widget.peerUid;
+    if (peerUid.isEmpty) return;
+    try {
+      final profile = await _userService.getProfile(peerUid);
+      if (profile == null || !mounted) return;
+      final name = (profile['name'] ?? '').toString().trim();
+      final email = (profile['email'] ?? '').toString().trim();
+      final department = (profile['department'] ?? '').toString().trim();
+      // Only overwrite when Firestore actually has a value — never blank
+      // out a name the caller already supplied.
+      if (name.isEmpty && email.isEmpty && department.isEmpty) return;
+      setState(() {
+        if (name.isNotEmpty) _peerName = name;
+        if (email.isNotEmpty) _peerEmail = email;
+        if (department.isNotEmpty) _peerDepartment = department;
+      });
+    } catch (_) {
+      // Non-critical: keep whatever the caller supplied. The header stays
+      // visible even if the profile read fails.
     }
   }
 
@@ -154,6 +200,20 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Builds the secondary line under the peer's name. Prefers the email
+  /// (a unique identifier for the student) and falls back to the
+  /// department when the email is not available. When both are known the
+  /// department is appended so the header carries more context without
+  /// becoming cluttered.
+  String _peerSubtitle() {
+    if (_peerEmail.isNotEmpty && _peerDepartment.isNotEmpty) {
+      return '$_peerEmail  •  $_peerDepartment';
+    }
+    if (_peerEmail.isNotEmpty) return _peerEmail;
+    if (_peerDepartment.isNotEmpty) return _peerDepartment;
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -162,13 +222,23 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
+        // The app's global AppBarTheme uses a LIGHT surface background
+        // (AppColors.surface). The header text therefore has to use the
+        // dark theme text colors — hard-coding white here made the peer's
+        // name invisible (white on white).
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textPrimary,
+        surfaceTintColor: AppColors.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+        shadowColor: AppColors.outline,
         title: Row(
           children: [
             UserAvatar(
-              name: widget.peerName,
+              name: _peerName,
               radius: 18,
-              color: Colors.white,
-              textColor: Theme.of(context).colorScheme.primary,
+              color: Theme.of(context).colorScheme.primary,
+              textColor: Colors.white,
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
@@ -180,26 +250,29 @@ class _ChatScreenState extends State<ChatScreen> {
                     children: [
                       Flexible(
                         child: Text(
-                          widget.peerName,
+                          _peerName.isEmpty ? 'Chat' : _peerName,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.titleMedium.copyWith(
-                            color: Colors.white,
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const VerifiedBadge(
-                        size: 14,
-                        color: Colors.greenAccent,
-                      ),
+                      const VerifiedBadge(size: 14),
                     ],
                   ),
-                  if (widget.peerEmail.isNotEmpty)
-                    Text(
-                      widget.peerEmail,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: Colors.white70,
+                  if (_peerEmail.isNotEmpty || _peerDepartment.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Text(
+                        _peerSubtitle(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ),
                 ],
