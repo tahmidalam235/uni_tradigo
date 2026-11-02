@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
@@ -13,15 +15,17 @@ import '../widgets/info_pill.dart';
 import '../services/transaction_service.dart';
 import 'review_screen.dart';
 
-/// TransactionScreen — confirms a deal between buyer and seller and
-/// drives the transaction through its lifecycle states.
+/// TransactionScreen — drives a deal through its lifecycle.
 ///
 /// Two modes:
-///   - listing only: shown right after tapping "Buy" on a listing; the
-///     screen creates the deal in Firestore in `Pending` status.
+///   - listing only: shown right after tapping "Buy" on a listing. The
+///     screen reserves the listing and creates the order in `Pending`.
 ///   - existing transaction: shown when opening an entry from "My
-///     Transactions" — the deal already exists, so we let the buyer/
-///     seller confirm or cancel it.
+///     Transactions" — the order already exists.
+///
+/// The status is read live from Firestore, so both the buyer and the
+/// seller see accept / reject / complete / cancel happen in real time
+/// without either side having to refresh.
 class TransactionScreen extends StatefulWidget {
   final Item item;
   final String? transactionId;
@@ -40,21 +44,56 @@ class TransactionScreen extends StatefulWidget {
 
 class _TransactionScreenState extends State<TransactionScreen> {
   final _txService = TransactionService();
+  StreamSubscription<Transaction?>? _txSub;
   String? _txId;
   String _status = 'Pending';
   bool _busy = false;
+
+  /// True once we have an order for this listing.
+  bool get _hasOrder => _txId != null;
+
+  bool get _isSeller {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid != null && widget.item.sellerId == uid;
+  }
+
+  bool get _isBuyer {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid != null && widget.item.sellerId != uid;
+  }
 
   @override
   void initState() {
     super.initState();
     _txId = widget.transactionId;
     if (widget.initialStatus != null) _status = widget.initialStatus!;
+    _subscribe();
+  }
+
+  @override
+  void dispose() {
+    _txSub?.cancel();
+    super.dispose();
+  }
+
+  /// Watches the order so status changes made by the other party appear
+  /// here immediately.
+  void _subscribe() {
+    final id = _txId;
+    if (id == null) return;
+    _txSub?.cancel();
+    _txSub = _txService.watchTransaction(id).listen((tx) {
+      if (!mounted) return;
+      if (tx == null) return;
+      setState(() => _status = tx.status);
+    });
   }
 
   StatusTone _toneForStatus(String status) {
     switch (status) {
       case 'Completed':
         return StatusTone.success;
+      case 'Accepted':
       case 'Confirmed':
         return StatusTone.info;
       case 'Cancelled':
@@ -68,6 +107,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     switch (status) {
       case 'Completed':
         return Icons.check_circle_outline_rounded;
+      case 'Accepted':
       case 'Confirmed':
         return Icons.handshake_rounded;
       case 'Cancelled':
@@ -77,7 +117,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
   }
 
-  Future<void> _confirmDeal() async {
+  /// Places the order: reserves the listing and creates a `Pending`
+  /// transaction in one atomic step.
+  Future<void> _buyNow() async {
     if (_busy) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -91,47 +133,73 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
     setState(() => _busy = true);
     try {
-      if (_txId == null) {
-        // Read the buyer's display name.
-        final profileSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        final buyerName =
-            (profileSnap.data()?['name'] ?? '').toString();
-        final id = await _txService.createDeal(
-          listing: widget.item,
-          buyerId: user.uid,
-          buyerName: buyerName,
-        );
-        _txId = id;
-      }
-      await _txService.updateStatus(
-        _txId!,
-        'Confirmed',
-        actedBy: user.uid,
+      // Read the buyer's display name.
+      final profileSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final buyerName =
+          (profileSnap.data()?['name'] ?? '').toString();
+      final id = await _txService.placeOrder(
+        listing: widget.item,
+        buyerId: user.uid,
+        buyerName: buyerName,
       );
       if (!mounted) return;
-      setState(() => _status = 'Confirmed');
+      setState(() {
+        _txId = id;
+        _status = 'Pending';
+      });
+      _subscribe();
       _showSuccess();
+    } on ListingUnavailableException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not confirm: $e')),
+        SnackBar(content: Text('Could not place the order: $e')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  /// Seller accepts the order. The listing stays reserved.
+  Future<void> _accept() async {
+    if (_busy || _txId == null) return;
+    setState(() => _busy = true);
+    try {
+      await _txService.acceptOrder(
+        _txId!,
+        FirebaseAuth.instance.currentUser?.uid ?? '',
+      );
+      if (!mounted) return;
+      setState(() => _status = 'Accepted');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order accepted.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not accept: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Seller marks the order as delivered and complete.
   Future<void> _completeDeal() async {
     if (_busy || _txId == null) return;
     setState(() => _busy = true);
     try {
-      await _txService.updateStatus(
-        _txId!,
-        'Completed',
-        actedBy: FirebaseAuth.instance.currentUser?.uid,
+      await _txService.completeOrder(
+        id: _txId!,
+        listingId: widget.item.id,
+        actedBy: FirebaseAuth.instance.currentUser?.uid ?? '',
       );
       if (!mounted) return;
       setState(() => _status = 'Completed');
@@ -148,17 +216,21 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
   }
 
+  /// Either party cancels the order. The listing returns to `Available`.
   Future<void> _cancel() async {
     if (_busy || _txId == null) return;
     setState(() => _busy = true);
     try {
-      await _txService.updateStatus(
-        _txId!,
-        'Cancelled',
-        actedBy: FirebaseAuth.instance.currentUser?.uid,
+      await _txService.cancelOrder(
+        id: _txId!,
+        listingId: widget.item.id,
+        actedBy: FirebaseAuth.instance.currentUser?.uid ?? '',
       );
       if (!mounted) return;
       setState(() => _status = 'Cancelled');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order cancelled.')),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -186,29 +258,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
             size: 36,
           ),
         ),
-        title: const Text('Deal Confirmed'),
+        title: const Text('Order placed'),
         content: const Text(
             'The seller has been notified. Coordinate pickup to complete the deal.'),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ReviewScreen(
-                    item: widget.item,
-                    transactionId: _txId!,
-                  ),
-                ),
-              );
-            },
-            child: const Text('Leave Review'),
-          ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
               // Pop everything above the home screen so the user lands
-              // back on the home page after confirming the deal.
+              // back on the home page after placing the order.
               Navigator.of(context).popUntil((route) => route.isFirst);
             },
             child: const Text('Done'),
@@ -218,12 +276,24 @@ class _TransactionScreenState extends State<TransactionScreen> {
     );
   }
 
+  void _openReview() {
+    if (_txId == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ReviewScreen(
+          item: widget.item,
+          transactionId: _txId!,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final isBuyer = user != null && user.uid != widget.item.sellerId;
+    final isBuyer = _isBuyer;
+    final isSeller = _isSeller;
     return Scaffold(
-      appBar: AppBar(title: const Text('Confirm Deal')),
+      appBar: AppBar(title: const Text('Order Details')),
       body: AppBackground(
         child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -270,11 +340,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 children: [
                   _row(
                     label: 'Buyer',
-                    value: isBuyer
-                        ? 'You'
-                        : (widget.item.sellerName.isEmpty
+                    value: isSeller
+                        ? (widget.item.sellerName.isEmpty
                             ? 'You'
-                            : widget.item.sellerName),
+                            : widget.item.sellerName)
+                        : 'You',
                   ),
                   const Divider(),
                   _row(
@@ -303,57 +373,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          if (_txId == null && isBuyer)
-            BusyButton(
-              onPressed: _confirmDeal,
-              busy: _busy,
-              label: 'Confirm Deal',
-              icon: Icons.check_circle_outline_rounded,
-              expand: true,
-            )
-          else if (_status == 'Confirmed')
-            Column(
-              children: [
-                BusyButton(
-                  onPressed: _completeDeal,
-                  busy: _busy,
-                  label: 'Mark as Completed',
-                  icon: Icons.task_alt_rounded,
-                  expand: true,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _cancel,
-                  icon: const Icon(Icons.close_rounded),
-                  label: const Text('Cancel Deal'),
-                ),
-              ],
-            )
-          else if (_status == 'Completed')
-            BusyButton(
-              onPressed: () {
-                if (_txId == null) return;
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ReviewScreen(
-                      item: widget.item,
-                      transactionId: _txId!,
-                    ),
-                  ),
-                );
-              },
-              busy: _busy,
-              label: 'Leave Review',
-              icon: Icons.rate_review_outlined,
-              expand: true,
-            )
-          else if (_status == 'Pending' && _txId != null)
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _cancel,
-              icon: const Icon(Icons.close_rounded),
-              label: const Text('Cancel Deal'),
-            ),
-          if (_status == 'Confirmed' || _status == 'Pending') ...[
+          ..._buildActions(isBuyer: isBuyer, isSeller: isSeller),
+          if (_status == 'Accepted' || _status == 'Pending') ...[
             const SizedBox(height: AppSpacing.lg),
             Center(
               child: InfoPill(
@@ -367,6 +388,104 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ),
       ),
     );
+  }
+
+  /// Role-aware action buttons for the current status.
+  ///
+  /// - No order yet (buyer)  -> Buy Now
+  /// - Pending   (seller)    -> Accept / Reject
+  /// - Pending   (buyer)     -> Cancel Order
+  /// - Accepted  (seller)    -> Mark as Completed / Cancel Order
+  /// - Accepted  (buyer)     -> Cancel Order
+  /// - Completed (both)      -> Leave Review
+  /// - Cancelled (both)      -> nothing
+  List<Widget> _buildActions({
+    required bool isBuyer,
+    required bool isSeller,
+  }) {
+    if (!_hasOrder) {
+      if (!isBuyer) return const [];
+      return [
+        BusyButton(
+          onPressed: _buyNow,
+          busy: _busy,
+          label: 'Buy Now',
+          icon: Icons.shopping_cart_checkout_rounded,
+          expand: true,
+        ),
+      ];
+    }
+
+    switch (_status) {
+      case 'Pending':
+        if (isSeller) {
+          return [
+            BusyButton(
+              onPressed: _accept,
+              busy: _busy,
+              label: 'Accept Order',
+              icon: Icons.check_circle_outline_rounded,
+              expand: true,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _cancel,
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Reject Order'),
+            ),
+          ];
+        }
+        return [
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _cancel,
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Cancel Order'),
+          ),
+        ];
+
+      case 'Accepted':
+      case 'Confirmed':
+        if (isSeller) {
+          return [
+            BusyButton(
+              onPressed: _completeDeal,
+              busy: _busy,
+              label: 'Mark as Completed',
+              icon: Icons.task_alt_rounded,
+              expand: true,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _cancel,
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cancel Order'),
+            ),
+          ];
+        }
+        return [
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _cancel,
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Cancel Order'),
+          ),
+        ];
+
+      case 'Completed':
+        // Reviews are only possible once the deal is done.
+        return [
+          BusyButton(
+            onPressed: _openReview,
+            busy: false,
+            label: 'Leave Review',
+            icon: Icons.rate_review_outlined,
+            expand: true,
+          ),
+        ];
+
+      case 'Cancelled':
+      default:
+        return const [];
+    }
   }
 
   Widget _row({required String label, required String value}) {

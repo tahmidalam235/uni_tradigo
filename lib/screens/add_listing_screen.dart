@@ -198,6 +198,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
         sellerId: user.uid,
         pickupLocation: _pickup.text.trim(),
         isAvailable: edit?.isAvailable ?? true,
+        purchaseStatus: edit?.purchaseStatus ?? 'Available',
         postedAt: edit?.postedAt ?? DateTime.now(),
       );
 
@@ -221,6 +222,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
           sellerId: newItem.sellerId,
           pickupLocation: newItem.pickupLocation,
           isAvailable: newItem.isAvailable,
+          purchaseStatus: newItem.purchaseStatus,
           postedAt: newItem.postedAt,
         );
       }

@@ -347,17 +347,19 @@ class ItemDetailsScreen extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: FilledButton.icon(
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      TransactionScreen(item: item),
-                                ),
-                              );
-                            },
+                            onPressed: item.isPurchaseable
+                                ? () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            TransactionScreen(item: item),
+                                      ),
+                                    );
+                                  }
+                                : null,
                             icon:
                                 const Icon(Icons.shopping_cart_checkout_rounded),
-                            label: const Text('Buy'),
+                            label: Text(_buyLabelFor(item)),
                           ),
                         ),
                       ],
@@ -367,6 +369,20 @@ class ItemDetailsScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  /// Label for the buy button, reflecting the listing's order-lifecycle
+  /// state. A listing that is already reserved or sold cannot be ordered
+  /// again, so the button is disabled.
+  String _buyLabelFor(Item item) {
+    switch (item.purchaseStatus) {
+      case 'Reserved':
+        return 'Reserved';
+      case 'Sold':
+        return 'Sold';
+      default:
+        return 'Buy';
+    }
   }
 
   Future<void> _toggleWishlist(
@@ -423,6 +439,7 @@ class ItemDetailsScreen extends StatelessWidget {
               sellerId: existing.sellerId,
               pickupLocation: existing.pickupLocation,
               isAvailable: isAvailable,
+              purchaseStatus: existing.purchaseStatus,
               postedAt: existing.postedAt,
             )
           else

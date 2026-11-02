@@ -603,6 +603,7 @@ class _TransactionsScreen extends StatelessWidget {
         return AppColors.success;
       case 'Cancelled':
         return AppColors.danger;
+      case 'Accepted':
       case 'Confirmed':
         return AppColors.info;
       default:
@@ -616,6 +617,7 @@ class _TransactionsScreen extends StatelessWidget {
         return StatusTone.success;
       case 'Cancelled':
         return StatusTone.danger;
+      case 'Accepted':
       case 'Confirmed':
         return StatusTone.info;
       default:

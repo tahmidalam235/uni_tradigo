@@ -1,16 +1,16 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'screens/splash_screen.dart';
-import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
-import 'theme/app_theme.dart';
-import 'theme/app_colors.dart';
+import 'package:flutter/material.dart';
+
 import 'data/app_state.dart';
+import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
-
+import 'theme/app_colors.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -80,18 +80,18 @@ class _AuthGate extends StatelessWidget {
           return const SplashScreen();
         }
         final user = snapshot.data;
-        if (user == null) return const LoginScreen();
-        // Register this device so the user can receive purchase and chat
-        // notifications. Fire-and-forget: the service swallows its own
-        // errors, so a failure here never blocks the app from opening.
-        //
-        // The builder can run more than once for the same user (any
-        // rebuild of the tree re-runs it), so the registration is
-        // guarded by the last-registered uid. Otherwise every rebuild
-        // would repeat the token fetch and the Firestore write.
+        if (user == null) {
+          _lastRegisteredUid = null;
+          return const LoginScreen();
+        }
         if (_lastRegisteredUid != user.uid) {
-          _lastRegisteredUid = user.uid;
-          NotificationService.instance.registerDeviceToken(user.uid);
+          NotificationService.instance.registerDeviceToken(user.uid).then((
+            success,
+          ) {
+            if (success) {
+              _lastRegisteredUid = user.uid;
+            }
+          });
         }
         return const HomeScreen();
       },

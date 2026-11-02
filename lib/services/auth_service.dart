@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'notification_service.dart';
 
 /// Thin wrapper around FirebaseAuth so screens don't import firebase_auth
 /// directly. All methods are async and throw [AuthException] on failure
@@ -35,9 +36,7 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyLoginMessage(e));
     } catch (_) {
-      throw AuthException(
-        'Please check your internet connection.',
-      );
+      throw AuthException('Please check your internet connection.');
     }
   }
 
@@ -56,14 +55,16 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyRegisterMessage(e));
     } catch (_) {
-      throw AuthException(
-        'Please check your internet connection.',
-      );
+      throw AuthException('Please check your internet connection.');
     }
   }
 
   /// Signs the current user out.
   Future<void> logout() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      await NotificationService.instance.unregisterDeviceToken(uid);
+    }
     await _auth.signOut();
   }
 

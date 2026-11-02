@@ -6,6 +6,13 @@ document** so the project works fully on the free Firebase Spark plan.
 The Firebase Storage rules are included for future use but are not
 required to run the app today.
 
+> **Project id:** `uni-tradigo-f12fe` — this is the project the app
+> talks to (`android/app/google-services.json`) and the one pinned in
+> `.firebaserc`. There is also an older, near-empty project named
+> `uni-tradigo` (one stray user document, no listings); it is a
+> leftover and is **not** used by the app. If you ever see the app
+> pointing at the wrong project, check `google-services.json`.
+
 ## One-time setup
 
 1. Open https://console.firebase.google.com/ → select project **`uni-tradigo-f12fe`**.
@@ -38,6 +45,21 @@ You should see:
 +  firestore: released rules firestore.rules to cloud.firestore
 +  storage:    released rules storage.rules to firebase.storage
 ```
+
+### IMPORTANT: re-deploy the rules after every rules change
+
+The client and the ruleset are deployed **separately**. Editing
+`firestore.rules` in the repo does **not** affect the running app — the
+old ruleset stays live until you deploy it. If you change the rules and
+do not deploy, the app keeps enforcing the previous ruleset, which is
+usually silent and shows up as a confusing `PERMISSION_DENIED` on the
+client (for example, "could not place the order").
+
+The project id is pinned in `.firebaserc`, so a plain
+`firebase deploy --only firestore:rules` is enough. To confirm the
+live ruleset matches the repo, check the Rules tab in the Firebase
+console (or run `firebase firestore:rules` — the CLI has no
+rules-get command, so use the console).
 
 ## Configuring the first admin (one-time)
 

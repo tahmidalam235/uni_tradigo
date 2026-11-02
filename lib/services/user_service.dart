@@ -34,7 +34,7 @@ class UserService {
       'email': email,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   /// Updates only the profile fields that the user is allowed to change.
@@ -59,7 +59,7 @@ class UserService {
       await ref.update({
         'name': name,
         'department': department,
-        if (studentId != null) 'studentId': studentId,
+        'studentId': ?studentId,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } on FirebaseException catch (e) {
@@ -99,11 +99,15 @@ class UserService {
     return _users
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map((d) {
-              final data = d.data();
-              data['uid'] = d.id;
-              return data;
-            }).toList(growable: false));
+        .map(
+          (snap) => snap.docs
+              .map((d) {
+                final data = d.data();
+                data['uid'] = d.id;
+                return data;
+              })
+              .toList(growable: false),
+        );
   }
 
   /// Admin-only: suspend or re-activate a user account by setting the
@@ -128,12 +132,9 @@ class UserService {
   Future<void> saveFcmToken(String uid, String token) async {
     final trimmed = token.trim();
     if (trimmed.isEmpty) return;
-    await _users.doc(uid).set(
-      {
-        'fcmTokens': FieldValue.arrayUnion([trimmed]),
-      },
-      SetOptions(merge: true),
-    );
+    await _users.doc(uid).set({
+      'fcmTokens': FieldValue.arrayUnion([trimmed]),
+    }, SetOptions(merge: true));
   }
 
   /// Removes a single FCM token from the user's profile.
@@ -151,10 +152,9 @@ class UserService {
         .map((t) => t.toString())
         .where((t) => t != trimmed)
         .toList(growable: false);
-    await _users.doc(uid).set(
-      {'fcmTokens': remaining},
-      SetOptions(merge: true),
-    );
+    await _users.doc(uid).set({
+      'fcmTokens': remaining,
+    }, SetOptions(merge: true));
   }
 
   /// Reads the FCM tokens registered for [uid]. Empty when the user has

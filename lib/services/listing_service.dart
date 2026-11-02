@@ -19,6 +19,12 @@ import '../models/item.dart';
 ///   imageUrl     : String  (Firebase Storage download URL, or empty)
 ///   createdAt    : Timestamp
 ///   isAvailable  : bool
+///   purchaseStatus: String  ('Available' | 'Reserved' | 'Sold')
+///
+/// `isAvailable` is the seller-controlled archive/activate flag.
+/// `purchaseStatus` is the order-lifecycle state, moved atomically by
+/// the purchase flow. Listings created before `purchaseStatus` existed
+/// read as 'Available'.
 ///
 /// Kept intentionally simple — no repository pattern, no use cases.
 class ListingService {
@@ -47,6 +53,7 @@ class ListingService {
       'imageUrl': item.imageUrl,
       'createdAt': FieldValue.serverTimestamp(),
       'isAvailable': item.isAvailable,
+      'purchaseStatus': 'Available',
     });
     return docRef.id;
   }
@@ -135,6 +142,13 @@ class ListingService {
     await _listings.doc(id).update({'isAvailable': isAvailable});
   }
 
+  // NOTE: there is deliberately no setter for `purchaseStatus` here. That
+  // field is only ever written from inside a Firestore transaction (see
+  // `TransactionService.placeOrder` / `cancelOrder` / `completeOrder`),
+  // because the rules only allow the `Available -> Reserved` transition
+  // when it is part of the same atomic operation that creates the order.
+  // Exposing a standalone setter would let a caller break that guarantee.
+
   // ---------- helper ----------
 
   Item _toItem(String id, Map<String, dynamic> data) {
@@ -170,6 +184,8 @@ class ListingService {
       sellerId: (data['sellerId'] ?? '').toString(),
       pickupLocation: (data['pickupLocation'] ?? '').toString(),
       isAvailable: data['isAvailable'] is bool ? data['isAvailable'] as bool : true,
+      purchaseStatus:
+          (data['purchaseStatus'] ?? 'Available').toString(),
       postedAt: postedAt,
     );
   }

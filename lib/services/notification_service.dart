@@ -11,58 +11,43 @@ import 'user_service.dart';
 ///   - Registers this device's FCM token against the signed-in user so
 ///     the Cloud Function knows where to deliver pushes.
 ///   - Surfaces messages that arrive while the app is in the foreground
-///     (the background and terminated states are handled by the OS).
+///     or when tapped from background/terminated states.
 ///
 /// What this service deliberately does NOT do:
-///   - Send anything. The `firebase_messaging` client SDK is receive-only
-///     — it cannot target a specific user's device token. Sending is the
-///     Cloud Function's job (see `functions/index.js`), which fires off
-///     Firestore writes. That also means the app can never accidentally
-///     notify a user about their own action.
+///   - Send anything directly from client. The `firebase_messaging` client
+///     SDK is receive-only. Sending is the Cloud Function's job (see `functions/index.js`).
 ///
 /// Delivery model:
-///   - Foreground  → [foregroundMessages] emits; the UI shows a banner.
-///   - Background  → Android renders the `notification` payload itself.
-///   - Terminated  → Android renders it too, and tapping it launches the
-///     app; [initialMessage] holds what the user tapped.
+///   - Foreground  → [foregroundMessages] emits; the UI presents a banner.
+///   - Background  → Android renders the `notification` payload in system tray.
+///                   Tapping fires `onMessageOpenedApp`.
+///   - Terminated  → Android renders it too; tapping launches the app and
+///                   [initialMessage] holds the payload.
 ///
 /// Token storage:
-///   - `users/{uid}.fcmTokens` — a list of device tokens. The Firestore
-///     rules already allow a user to update their own document, so no
-///     rules change was needed.
-///
-/// Singleton:
-///   This class must be a single shared instance. The foreground message
-///   stream is backed by a per-instance broadcast controller, so if the
-///   app created two instances the one holding the `onMessage` listener
-///   would be different from the one the UI listens to — and no
-///   foreground banner would ever be shown. [instance] guarantees one
-///   instance for the whole app.
+///   - `users/{uid}.fcmTokens` — a list of device tokens.
 class NotificationService {
-  /// The single shared instance. Use this instead of constructing a new
-  /// [NotificationService] directly.
+  /// The single shared instance.
   static final NotificationService instance = NotificationService._();
 
   final UserService _users = UserService();
 
   NotificationService._();
 
-  /// Broadcast controller for messages received while the app is open.
+  /// Broadcast controller for messages received while the app is open or opened from background.
   final StreamController<RemoteMessage> _foregroundController =
       StreamController<RemoteMessage>.broadcast();
 
-  /// The message the user tapped to open the app from a terminated
-  /// state. Null when the app was opened normally.
+  /// The message the user tapped to open the app from a terminated state.
   RemoteMessage? _initialMessage;
 
-  /// Messages that arrive while the app is in the foreground.
+  /// Messages that arrive while the app is open or tapped from background.
   Stream<RemoteMessage> get foregroundMessages => _foregroundController.stream;
 
-  /// The notification the user tapped to launch the app (terminated
-  /// state). Null when the app was opened normally.
+  /// The notification tapped to launch the app from a terminated state.
   RemoteMessage? get initialMessage => _initialMessage;
 
-  /// True when the user has already granted notification permission.
+  /// True when the user has granted notification permission.
   Future<bool> hasPermission() async {
     try {
       final settings = await FirebaseMessaging.instance
@@ -74,91 +59,78 @@ class NotificationService {
     }
   }
 
-  /// Sets up messaging. Call once from `main()` after Firebase is
-  /// initialised and before `runApp`.
-  ///
-  /// Registers the background handler (which is what makes terminated
-  /// delivery work), asks for permission, and wires up the foreground
-  /// stream and token-refresh handling.
-  ///
-  /// Never throws — a messaging setup failure must not stop the app from
-  /// starting.
+  /// Sets up FCM messaging. Call once from `main()` after Firebase initialized.
   Future<void> init() async {
     try {
-      // Background / terminated delivery.
-      //
-      // This runs in its own isolate when the OS delivers a message to
-      // an app that isn't running, so it must be a top-level function
-      // marked with `@pragma('vm:entry-point')`.
+      // Register background handler for terminated message processing
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       final messaging = FirebaseMessaging.instance;
 
-      // Android 13+ (API 33) requires an explicit runtime permission.
-      // On iOS this shows the system prompt; on older Android versions
-      // it is a no-op because permission is granted at install time.
+      // Request permissions (Android 13+ runtime permission & iOS prompt)
       await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+
+      // Presentation options when app is in foreground
+      await messaging.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
         sound: true,
       );
 
-      // Foreground messages -> the broadcast stream the UI listens to.
-      FirebaseMessaging.onMessage.listen(_foregroundController.add);
-
-      // A new token is issued when the app is reinstalled or the user
-      // clears app data. Persist it so pushes keep arriving.
-      messaging.onTokenRefresh.listen((token) {
-        final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (uid == null || uid.isEmpty) return;
-        // Fire and forget — a failed write just means this device
-        // won't receive pushes until the next launch.
-        _users.saveFcmToken(uid, token).catchError((_) {});
+      // Foreground messages -> broadcast controller
+      FirebaseMessaging.onMessage.listen((message) {
+        _foregroundController.add(message);
       });
 
-      // The message that launched the app from a terminated state.
+      // Background notification tap -> broadcast controller
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        _foregroundController.add(message);
+      });
+
+      // FCM token refresh handling
+      messaging.onTokenRefresh.listen((token) {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null && uid.isNotEmpty) {
+          _users.saveFcmToken(uid, token).catchError((_) {});
+        }
+      });
+
+      // Message that launched the app from a terminated state
       _initialMessage = await messaging.getInitialMessage();
     } catch (_) {
-      // Messaging is a nice-to-have; the app must still open if it fails.
+      // Messaging setup is resilient; fails silently without crashing startup
     }
   }
 
-  /// Registers this device's FCM token against [uid].
-  ///
-  /// Safe to call repeatedly (it is called on every sign-in). Never
-  /// throws, so it can be fired from a widget build without guarding
-  /// the call site.
-  Future<void> registerDeviceToken(String uid) async {
-    if (uid.isEmpty) return;
+  /// Registers this device's FCM token against [uid]. Returns true on success.
+  Future<bool> registerDeviceToken(String uid) async {
+    if (uid.isEmpty) return false;
     try {
       final token = await FirebaseMessaging.instance.getToken();
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.trim().isEmpty) return false;
       await _users.saveFcmToken(uid, token);
+      return true;
     } catch (_) {
-      // Non-critical: without a token the device simply won't receive
-      // pushes. The app continues to work normally.
+      return false;
     }
   }
 
   /// Unregisters this device's FCM token from [uid].
-  ///
-  /// Called on sign-out so the next person to use the device doesn't
-  /// receive the previous user's notifications. Best-effort: the Firestore
-  /// rules only let the owner update their own document, so this must
-  /// run *before* the user signs out.
   Future<void> unregisterDeviceToken(String uid) async {
     if (uid.isEmpty) return;
     try {
       final token = await FirebaseMessaging.instance.getToken();
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.trim().isEmpty) return;
       await _users.removeFcmToken(uid, token);
-    } catch (_) {
-      // Non-critical — a stale token simply means no push arrives.
-    }
+    } catch (_) {}
   }
 
-  /// The FCM tokens registered for [uid]. Empty when the user has no
-  /// device registered.
+  /// Returns registered FCM tokens for [uid].
   Future<List<String>> tokensForUser(String uid) async {
     if (uid.isEmpty) return const [];
     try {
@@ -173,20 +145,8 @@ class NotificationService {
   }
 }
 
-/// Background / terminated message handler.
-///
-/// The server sends a `notification` payload (title + body) alongside the
-/// `data` payload. When the app is backgrounded or terminated, Android
-/// renders that notification in the system tray **by itself** — no extra
-/// code is required.
-///
-/// This handler is therefore intentionally empty. Posting a local
-/// notification here as well would show the user two copies of the same
-/// message, because the OS would already have shown one.
-///
-/// The `data` payload is still delivered in [message.data] so the app can
-/// act on it when the user taps through.
+/// Top-level background message handler for FCM.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Intentionally empty — see the doc comment above.
+  // Handled by Android OS system tray using notification payload
 }

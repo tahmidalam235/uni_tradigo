@@ -46,6 +46,101 @@ service cloud.firestore {
     // --- Listings -----------------------------------------------------
 
     match /listings/{listingId} {
+      // --- Purchase-status helpers -------------------------------------
+      //
+      // A listing carries a `purchaseStatus` field describing where it
+      // is in the order lifecycle: 'Available' -> 'Reserved' -> 'Sold'.
+      // It is separate from `isAvailable`, which is the seller-controlled
+      // archive/activate flag.
+      //
+      // Only three transitions are legal:
+      //   Available -> Reserved  (a buyer atomically reserves it)
+      //   Reserved  -> Available (the order was cancelled)
+      //   Reserved  -> Sold      (the seller completed the order)
+      //
+      // Every transition may only touch `purchaseStatus` and `updatedAt`.
+      //
+      // These live inside the match block so `listingId` is in scope for
+      // the `exists()` guards.
+
+      // The listing's current purchase status. Listings created before
+      // this field existed have no value, so they count as 'Available'.
+      //
+      // The `exists()` guard matters: when an `update` rule is evaluated
+      // for a create, `resource.data` is null and touching it throws
+      // instead of returning false.
+      function listingPurchaseStatus() {
+        return exists(/databases/$(database)/documents/listings/$(listingId))
+          && resource.data.keys().hasAll(['purchaseStatus'])
+          ? resource.data.purchaseStatus
+          : 'Available';
+      }
+
+      // The purchase status being written.
+      function nextPurchaseStatus() {
+        return request.resource.data.keys().hasAll(['purchaseStatus'])
+          ? request.resource.data.purchaseStatus
+          : 'Available';
+      }
+
+      // The seller who owns the listing.
+      function isListingOwner() {
+        return exists(/databases/$(database)/documents/listings/$(listingId))
+          && resource.data.sellerId == request.auth.uid;
+      }
+
+      // True when the update touches ONLY the purchase-status fields.
+      function onlyTouchesPurchaseStatus() {
+        return exists(/databases/$(database)/documents/listings/$(listingId))
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['purchaseStatus', 'updatedAt']);
+      }
+
+      // A buyer reserving an Available listing they do not own.
+      function isValidReservation() {
+        return isSignedIn()
+          && exists(/databases/$(database)/documents/listings/$(listingId))
+          && resource.data.sellerId != request.auth.uid
+          && listingPurchaseStatus() == 'Available'
+          && nextPurchaseStatus() == 'Reserved'
+          && onlyTouchesPurchaseStatus();
+      }
+
+      // Releasing a Reserved listing back to Available. Allowed for the
+      // seller or for the buyer whose order was cancelled.
+      function isValidRelease() {
+        return isSignedIn()
+          && listingPurchaseStatus() == 'Reserved'
+          && nextPurchaseStatus() == 'Available'
+          && onlyTouchesPurchaseStatus();
+      }
+
+      // Marking a Reserved listing as Sold. Seller only.
+      function isValidSale() {
+        return isSignedIn()
+          && isListingOwner()
+          && listingPurchaseStatus() == 'Reserved'
+          && nextPurchaseStatus() == 'Sold'
+          && onlyTouchesPurchaseStatus();
+      }
+
+      // True when the write changes the purchase-status field.
+      function touchesPurchaseStatus() {
+        return exists(/databases/$(database)/documents/listings/$(listingId))
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasAny(['purchaseStatus']);
+      }
+
+      // The seller may edit their listing, but may not freely rewrite the
+      // purchase status — that has to go through the legal transitions.
+      function isSellerEdit() {
+        return isSignedIn()
+          && isListingOwner()
+          && (!touchesPurchaseStatus()
+              || isValidSale()
+              || isValidRelease());
+      }
+
       // Anyone signed in can read any listing.
       allow read: if isSignedIn();
 
@@ -53,9 +148,16 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.resource.data.sellerId == request.auth.uid;
 
-      // Update / delete: only the owner.
-      allow update, delete: if isSignedIn()
-                            && resource.data.sellerId == request.auth.uid;
+      // Update: the owner (subject to the purchase-status transitions),
+      // or a buyer performing an atomic reservation / cancellation
+      // release.
+      allow update: if isSellerEdit()
+                     || isValidReservation()
+                     || isValidRelease();
+
+      // Delete: only the owner.
+      allow delete: if isSignedIn()
+                    && resource.data.sellerId == request.auth.uid;
 
       // Admins can delete any listing (moderation).
       allow delete: if isAdmin();
@@ -147,20 +249,23 @@ service cloud.firestore {
                       || isAdmin());
 
       // Create: caller must be the buyer and participants must be [seller, buyer].
+      // An order always starts as 'Pending' — the seller decides whether to
+      // accept it, so a transaction can never be created pre-accepted.
       allow create: if isSignedIn()
                     && request.resource.data.buyerId == request.auth.uid
                     && request.auth.uid in request.resource.data.participants
-                    && request.resource.data.participants.size() == 2;
+                    && request.resource.data.participants.size() == 2
+                    && request.resource.data.status == 'Pending';
 
       // Update: only participants, and the participants list is immutable.
-      // status can only move forward (Pending -> Confirmed -> Completed or Cancelled).
+      // status can only move forward (Pending -> Accepted -> Completed or Cancelled).
       allow update: if isSignedIn()
                     && request.auth.uid in resource.data.participants
                     && request.resource.data.participants == resource.data.participants
                     && request.resource.data.buyerId == resource.data.buyerId
                     && request.resource.data.sellerId == resource.data.sellerId
                     && request.resource.data.status in
-                       ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
+                       ['Pending', 'Accepted', 'Confirmed', 'Completed', 'Cancelled'];
 
       // Delete: only an admin.
       allow delete: if isAdmin();

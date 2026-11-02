@@ -18,6 +18,14 @@ class Item {
   final bool isAvailable;
   final DateTime postedAt;
 
+  /// Where the listing sits in the order lifecycle.
+  ///
+  /// This is separate from [isAvailable], which is the seller-controlled
+  /// archive/activate flag. `purchaseStatus` moves
+  /// 'Available' -> 'Reserved' -> 'Sold', and listings created before
+  /// this field existed read as 'Available'.
+  final String purchaseStatus;
+
   Item({
     required this.id,
     required this.title,
@@ -32,8 +40,12 @@ class Item {
     required this.sellerId,
     required this.pickupLocation,
     this.isAvailable = true,
+    this.purchaseStatus = 'Available',
     DateTime? postedAt,
   }) : postedAt = postedAt ?? DateTime.now();
+
+  /// Whether a buyer can still place an order on this listing.
+  bool get isPurchaseable => purchaseStatus == 'Available';
 
   // Display price in Taka. Returns "Free" for 0 price.
   String get priceLabel => price <= 0 ? 'Free' : '৳${price.toStringAsFixed(0)}';
@@ -138,9 +150,17 @@ class Transaction {
   final String tradeType;
   final double price;
   final String pickupLocation;
-  final String status; // 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled'
+  final String status; // 'Pending' | 'Accepted' | 'Confirmed' | 'Completed' | 'Cancelled'
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// The uid of the participant who made the most recent status change.
+  /// Used by the notification trigger to avoid telling someone about
+  /// their own action. Null on documents written before it existed.
+  final String? actedBy;
+
+  /// The two uids allowed to read and update this order.
+  final List<String> participants;
 
   Transaction({
     required this.id,
@@ -154,10 +174,22 @@ class Transaction {
     required this.price,
     required this.pickupLocation,
     required this.status,
+    this.actedBy,
+    List<String> participants = const [],
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : createdAt = createdAt ?? DateTime.now(),
+  })  : participants = List<String>.unmodifiable(participants),
+        createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
+
+  /// Whether the order has been delivered and marked complete.
+  bool get isCompleted => status == 'Completed';
+
+  /// Whether the order was cancelled (by either party).
+  bool get isCancelled => status == 'Cancelled';
+
+  /// Whether the order is still open (not completed, not cancelled).
+  bool get isActive => !isCompleted && !isCancelled;
 }
 
 // A review / rating record.
